@@ -502,5 +502,85 @@
     A.renderers.recibo = render;
   });
   </script>
+
+  <script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const A = window.APP, KO = window.KO;
+    const container = document.getElementById("view-settings");
+
+    function customerInUse(id) { return A.state.deliveries.some((d) => d.customerId === id); }
+    function flavourInUse(id) { return A.state.deliveries.some((d) => (d.items || []).some((it) => it.flavourId === id)); }
+
+    function render() {
+      const st = A.state.settings;
+      if (!st) { container.innerHTML = "<p class='muted'>Loading…</p>"; return; }
+
+      container.innerHTML =
+        `<div class="card"><h4>Account</h4><p class="muted">${A.user ? A.user.email : ""}</p>` +
+          `<button class="link" id="logoutBtn">Log out</button></div>` +
+        `<div class="card"><h4>Bottle sizes & prices</h4>` +
+          st.sizes.map((s, i) =>
+            `<div class="row" data-idx="${i}">` +
+            `<div><label>Label</label><input class="s-label" value="${s.label}"/></div>` +
+            `<div><label>Price €</label><input class="s-price" type="number" step="0.5" value="${s.price}"/></div>` +
+            `<div><label>Deposit €</label><input class="s-dep" type="number" step="0.5" value="${s.deposit}"/></div>` +
+            `</div>`).join("") +
+          `<label>Recibo header text</label><input id="recHeader" value="${st.reciboHeader}"/>` +
+          `<button class="primary" id="saveSettings">Save settings</button>` +
+          `<p id="setMsg" class="muted"></p></div>` +
+        `<div class="card"><h4>Customers</h4>` +
+          A.state.customers.slice().sort((a,b)=>a.name.localeCompare(b.name)).map((c) =>
+            `<div class="row"><div>${c.name}</div>` +
+            `<button class="link" data-delcust="${c.id}" style="flex:0 0 60px">Delete</button></div>`).join("") +
+          `</div>` +
+        `<div class="card"><h4>Flavours</h4>` +
+          A.state.flavours.slice().sort((a,b)=>a.name.localeCompare(b.name)).map((f) =>
+            `<div class="row"><div>${f.name}</div>` +
+            `<button class="link" data-delflav="${f.id}" style="flex:0 0 60px">Delete</button></div>`).join("") +
+          `</div>` +
+        `<div class="card"><h4>Backup</h4>` +
+          `<button class="link" id="exportBtn">Export all data (JSON)</button></div>`;
+
+      container.querySelector("#logoutBtn").addEventListener("click", () => A.logout());
+
+      container.querySelector("#saveSettings").addEventListener("click", async () => {
+        const sizes = Array.from(container.querySelectorAll(".row[data-idx]")).map((row, i) => ({
+          id: st.sizes[i].id,
+          label: row.querySelector(".s-label").value.trim(),
+          price: parseFloat(row.querySelector(".s-price").value) || 0,
+          deposit: parseFloat(row.querySelector(".s-dep").value) || 0,
+        }));
+        await A.saveSettings({ sizes, reciboHeader: container.querySelector("#recHeader").value.trim() });
+        container.querySelector("#setMsg").textContent = "Saved ✓";
+      });
+
+      container.querySelectorAll("[data-delcust]").forEach((b) =>
+        b.addEventListener("click", async () => {
+          if (customerInUse(b.dataset.delcust)) { alert("Cannot delete: this customer has deliveries."); return; }
+          if (confirm("Delete this customer?")) await A.deleteCustomer(b.dataset.delcust);
+        }));
+      container.querySelectorAll("[data-delflav]").forEach((b) =>
+        b.addEventListener("click", async () => {
+          if (flavourInUse(b.dataset.delflav)) { alert("Cannot delete: this flavour is used by deliveries."); return; }
+          if (confirm("Delete this flavour?")) await A.deleteFlavour(b.dataset.delflav);
+        }));
+
+      container.querySelector("#exportBtn").addEventListener("click", () => {
+        const data = {
+          version: 1, exportedAt: new Date().toISOString(),
+          settings: A.state.settings, customers: A.state.customers,
+          flavours: A.state.flavours, deliveries: A.state.deliveries,
+        };
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = "kombucha-backup.json"; a.click();
+        URL.revokeObjectURL(url);
+      });
+    }
+
+    A.renderers.settings = render;
+  });
+  </script>
 </body>
 </html>

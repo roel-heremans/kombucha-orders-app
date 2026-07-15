@@ -142,3 +142,17 @@ test("generateRecibo with no deliveries", () => {
     "OUT - Kombucha Produto\n\nTotal: 0.00 Euro"
   );
 });
+
+test("barChartSVG renders one rect per datum", () => {
+  const svg = KO.barChartSVG([{ label: "Jun", value: 10 }, { label: "Jul", value: 5 }]);
+  assert.ok(svg.startsWith("<svg"));
+  assert.strictEqual((svg.match(/<rect/g) || []).length, 2);
+  assert.ok(svg.includes("Jun"));
+  assert.ok(svg.includes("Jul"));
+});
+
+test("barChartSVG handles empty data", () => {
+  const svg = KO.barChartSVG([]);
+  assert.ok(svg.startsWith("<svg"));
+  assert.strictEqual((svg.match(/<rect/g) || []).length, 0);
+});

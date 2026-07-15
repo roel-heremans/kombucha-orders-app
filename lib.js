@@ -180,5 +180,38 @@
     return [header, ""].concat(body).concat([separator, totalLine]).join("\n");
   }
 
-  return { formatMoney, sizeById, deliveryRevenue, deliveryDepositRefund, monthKey, inMonth, monthName, dayOfMonth, recentMonthKeys, monthlyRevenue, revenueByCustomer, monthlyRevenueSeries, flavourCounts, outstandingByCustomer, reciboSizeLabel, generateRecibo };
+  function escapeXml(s) {
+    return String(s).replace(/[<>&'"]/g, function (c) {
+      return { "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" }[c];
+    });
+  }
+
+  function barChartSVG(data, opts) {
+    opts = opts || {};
+    const width = opts.width || 320;
+    const height = opts.height || 160;
+    const color = opts.color || "#4a7c59";
+    const pad = 24;
+    const chartH = height - pad * 2;
+    const max = data.reduce(function (m, d) { return Math.max(m, d.value); }, 0) || 1;
+    const n = data.length;
+    const slot = n > 0 ? (width - pad * 2) / n : 0;
+    const barW = slot * 0.6;
+    let bars = "";
+    data.forEach(function (d, i) {
+      const h = (d.value / max) * chartH;
+      const x = pad + slot * i + (slot - barW) / 2;
+      const y = pad + (chartH - h);
+      bars += '<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) +
+        '" width="' + barW.toFixed(1) + '" height="' + h.toFixed(1) +
+        '" fill="' + color + '"/>';
+      bars += '<text x="' + (x + barW / 2).toFixed(1) + '" y="' + (height - 6) +
+        '" font-size="9" text-anchor="middle" fill="currentColor">' +
+        escapeXml(d.label) + "</text>";
+    });
+    return '<svg viewBox="0 0 ' + width + " " + height +
+      '" width="100%" role="img">' + bars + "</svg>";
+  }
+
+  return { formatMoney, sizeById, deliveryRevenue, deliveryDepositRefund, monthKey, inMonth, monthName, dayOfMonth, recentMonthKeys, monthlyRevenue, revenueByCustomer, monthlyRevenueSeries, flavourCounts, outstandingByCustomer, reciboSizeLabel, generateRecibo, barChartSVG };
 });

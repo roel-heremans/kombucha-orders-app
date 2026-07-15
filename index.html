@@ -479,14 +479,17 @@
     }
 
     // One delegated listener (bars are re-created on every render): tap a bar to
-    // show its value in that chart's caption. Works for touch and mouse.
-    container.addEventListener("click", (e) => {
+    // show its value in that chart's caption. pointerdown fires reliably for both
+    // touch (iOS Safari doesn't always fire click on SVG shapes) and mouse.
+    function showTip(e) {
       const bar = e.target.closest ? e.target.closest("[data-tip]") : null;
       if (!bar) return;
       const wrap = bar.closest(".chartwrap");
       const tip = wrap && wrap.querySelector(".chart-tip");
       if (tip) tip.textContent = bar.getAttribute("data-tip");
-    });
+    }
+    container.addEventListener("pointerdown", showTip);
+    container.addEventListener("click", showTip); // fallback for older browsers
 
     A.renderers.dashboard = render;
   });

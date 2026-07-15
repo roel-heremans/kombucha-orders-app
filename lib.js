@@ -51,5 +51,41 @@
     return keys;
   }
 
-  return { formatMoney, sizeById, deliveryRevenue, deliveryDepositRefund, monthKey, inMonth, monthName, dayOfMonth, recentMonthKeys };
+  function monthlyRevenue(deliveries, sizes, mk) {
+    return deliveries.reduce(function (sum, d) {
+      return inMonth(d.date, mk) ? sum + deliveryRevenue(d, sizes) : sum;
+    }, 0);
+  }
+
+  function revenueByCustomer(deliveries, sizes, mk) {
+    const byId = {};
+    deliveries.forEach(function (d) {
+      if (!inMonth(d.date, mk)) return;
+      byId[d.customerId] = (byId[d.customerId] || 0) + deliveryRevenue(d, sizes);
+    });
+    return Object.keys(byId)
+      .map(function (id) { return { customerId: id, amount: byId[id] }; })
+      .sort(function (a, b) { return b.amount - a.amount; });
+  }
+
+  function monthlyRevenueSeries(deliveries, sizes, monthKeys) {
+    return monthKeys.map(function (mk) {
+      return { monthKey: mk, amount: monthlyRevenue(deliveries, sizes, mk) };
+    });
+  }
+
+  function flavourCounts(deliveries, mk) {
+    const byId = {};
+    deliveries.forEach(function (d) {
+      if (!inMonth(d.date, mk)) return;
+      (d.items || []).forEach(function (it) {
+        byId[it.flavourId] = (byId[it.flavourId] || 0) + it.quantity;
+      });
+    });
+    return Object.keys(byId)
+      .map(function (id) { return { flavourId: id, quantity: byId[id] }; })
+      .sort(function (a, b) { return b.quantity - a.quantity; });
+  }
+
+  return { formatMoney, sizeById, deliveryRevenue, deliveryDepositRefund, monthKey, inMonth, monthName, dayOfMonth, recentMonthKeys, monthlyRevenue, revenueByCustomer, monthlyRevenueSeries, flavourCounts };
 });

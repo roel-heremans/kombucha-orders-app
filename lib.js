@@ -87,6 +87,22 @@
       .sort(function (a, b) { return b.quantity - a.quantity; });
   }
 
+  function revenueByCustomerType(deliveries, sizes, customers, mk) {
+    const typeById = {};
+    (customers || []).forEach(function (c) {
+      typeById[c.id] = c.type === "private" ? "private" : "restaurant";
+    });
+    const byType = {};
+    deliveries.forEach(function (d) {
+      if (!inMonth(d.date, mk)) return;
+      const t = typeById[d.customerId] || "restaurant";
+      byType[t] = (byType[t] || 0) + deliveryRevenue(d, sizes);
+    });
+    return Object.keys(byType)
+      .map(function (t) { return { type: t, amount: byType[t] }; })
+      .sort(function (a, b) { return b.amount - a.amount; });
+  }
+
   function outstandingByCustomer(deliveries, sizes) {
     const byCust = {};
     deliveries.forEach(function (d) {
@@ -117,7 +133,9 @@
     return size.label.replace(/\s+/g, "");
   }
 
-  function generateRecibo(deliveries, customerId, mk, sizes, header) {
+  function generateRecibo(deliveries, customerId, mk, sizes, header, nif) {
+    const headerLines = [header];
+    if (nif && String(nif).trim()) headerLines.push("NIF: " + String(nif).trim());
     const mine = deliveries
       .filter(function (d) { return d.customerId === customerId && inMonth(d.date, mk); })
       .slice()
@@ -170,14 +188,14 @@
 
     const totalLine = "Total: " + formatMoney(total) + " Euro";
     const body = deliveryLines.concat(returnLines);
-    if (body.length === 0) return header + "\n\n" + totalLine;
+    if (body.length === 0) return headerLines.join("\n") + "\n\n" + totalLine;
 
     const longest = body.concat([totalLine]).reduce(function (w, l) {
       return Math.max(w, l.length);
     }, 0);
     const separator = "-".repeat(longest);
 
-    return [header, ""].concat(body).concat([separator, totalLine]).join("\n");
+    return headerLines.concat([""]).concat(body).concat([separator, totalLine]).join("\n");
   }
 
   function escapeXml(s) {
@@ -213,5 +231,5 @@
       '" width="100%" role="img">' + bars + "</svg>";
   }
 
-  return { formatMoney, sizeById, deliveryRevenue, deliveryDepositRefund, monthKey, inMonth, monthName, dayOfMonth, recentMonthKeys, monthlyRevenue, revenueByCustomer, monthlyRevenueSeries, flavourCounts, outstandingByCustomer, reciboSizeLabel, generateRecibo, barChartSVG };
+  return { formatMoney, sizeById, deliveryRevenue, deliveryDepositRefund, monthKey, inMonth, monthName, dayOfMonth, recentMonthKeys, monthlyRevenue, revenueByCustomer, monthlyRevenueSeries, flavourCounts, revenueByCustomerType, outstandingByCustomer, reciboSizeLabel, generateRecibo, barChartSVG };
 });

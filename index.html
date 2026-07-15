@@ -439,6 +439,7 @@
       const series = KO.monthlyRevenueSeries(A.state.deliveries, sizes, KO.recentMonthKeys(mk, 6));
       const outstanding = KO.outstandingByCustomer(A.state.deliveries, sizes);
       const flavours = KO.flavourCounts(A.state.deliveries, mk);
+      const byType = KO.revenueByCustomerType(A.state.deliveries, sizes, A.state.customers, mk);
 
       const revChart = KO.barChartSVG(series.map((s) => ({ label: KO.monthName(s.monthKey).slice(0, 3), value: s.amount })));
       const custChart = KO.barChartSVG(byCust.map((c) => ({ label: A.customerName(c.customerId).slice(0, 6), value: c.amount })));
@@ -449,6 +450,10 @@
         `<div class="card"><h4>By customer</h4>` +
           (byCust.length ? custChart + "<table>" + byCust.map((c) =>
             `<tr><td>${A.esc(A.customerName(c.customerId))}</td><td>€${KO.formatMoney(c.amount)}</td></tr>`).join("") + "</table>"
+            : "<p class='muted'>No revenue this month.</p>") + `</div>` +
+        `<div class="card"><h4>By customer type</h4>` +
+          (byType.length ? "<table>" + byType.map((t) =>
+            `<tr><td>${t.type === "private" ? "Private" : "Restaurant"}</td><td>€${KO.formatMoney(t.amount)}</td></tr>`).join("") + "</table>"
             : "<p class='muted'>No revenue this month.</p>") + `</div>` +
         `<div class="card"><h4>Outstanding bottles & deposit</h4>` +
           (outstanding.length ? "<table><tr><th>Customer</th><th>Out</th><th>Deposit</th></tr>" +
@@ -490,7 +495,10 @@
         .map((c) => `<option value="${c.id}" ${c.id === custId ? "selected" : ""}>${A.esc(c.name)}</option>`).join("");
 
       let text = "";
-      if (custId) text = KO.generateRecibo(A.state.deliveries, custId, mk, A.state.settings.sizes, A.state.settings.reciboHeader);
+      if (custId) {
+        const cust = A.state.customers.find((c) => c.id === custId);
+        text = KO.generateRecibo(A.state.deliveries, custId, mk, A.state.settings.sizes, A.state.settings.reciboHeader, cust ? cust.nif : "");
+      }
 
       container.innerHTML =
         `<div class="card">` +
@@ -541,9 +549,19 @@
           `<button class="primary" id="saveSettings">Save settings</button>` +
           `<p id="setMsg" class="muted"></p></div>` +
         `<div class="card"><h4>Customers</h4>` +
+          `<p class="muted">Set each customer's type, NIF and notes. Add new customers from the New delivery screen.</p>` +
           A.state.customers.slice().sort((a,b)=>a.name.localeCompare(b.name)).map((c) =>
-            `<div class="row"><div>${A.esc(c.name)}</div>` +
-            `<button class="link" data-delcust="${c.id}" style="flex:0 0 60px">Delete</button></div>`).join("") +
+            `<div class="cust-edit" data-cid="${c.id}" style="border-top:1px solid var(--line);padding-top:8px;margin-top:8px">` +
+            `<label>Name</label><input class="c-name" value="${A.esc(c.name)}"/>` +
+            `<div class="row"><div><label>Type</label><select class="c-type">` +
+              `<option value="restaurant" ${(c.type||"restaurant")==="restaurant"?"selected":""}>Restaurant</option>` +
+              `<option value="private" ${c.type==="private"?"selected":""}>Private</option>` +
+            `</select></div>` +
+            `<div><label>NIF</label><input class="c-nif" value="${A.esc(c.nif||"")}"/></div></div>` +
+            `<label>Notes</label><input class="c-notes" value="${A.esc(c.notes||"")}"/>` +
+            `<div class="row"><button class="link c-save">Save</button>` +
+            `<button class="link" data-delcust="${c.id}" style="flex:0 0 60px">Delete</button></div>` +
+            `</div>`).join("") +
           `</div>` +
         `<div class="card"><h4>Flavours</h4>` +
           A.state.flavours.slice().sort((a,b)=>a.name.localeCompare(b.name)).map((f) =>
@@ -565,6 +583,20 @@
         await A.saveSettings({ sizes, reciboHeader: container.querySelector("#recHeader").value.trim() });
         container.querySelector("#setMsg").textContent = "Saved ✓";
       });
+
+      container.querySelectorAll(".cust-edit").forEach((card) =>
+        card.querySelector(".c-save").addEventListener("click", async () => {
+          const save = card.querySelector(".c-save");
+          try {
+            await A.updateCustomer(card.dataset.cid, {
+              name: card.querySelector(".c-name").value.trim(),
+              type: card.querySelector(".c-type").value,
+              nif: card.querySelector(".c-nif").value.trim(),
+              notes: card.querySelector(".c-notes").value.trim(),
+            });
+            save.textContent = "Saved ✓";
+          } catch (e) { save.textContent = "Save failed"; }
+        }));
 
       container.querySelectorAll("[data-delcust]").forEach((b) =>
         b.addEventListener("click", async () => {

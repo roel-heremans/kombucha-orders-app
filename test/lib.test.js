@@ -156,3 +156,44 @@ test("barChartSVG handles empty data", () => {
   assert.ok(svg.startsWith("<svg"));
   assert.strictEqual((svg.match(/<rect/g) || []).length, 0);
 });
+
+test("revenueByCustomerType groups by customer type, default restaurant", () => {
+  const customers = [
+    { id: "A", name: "Palm Spot", type: "restaurant" },
+    { id: "B", name: "Nina", type: "private" },
+  ];
+  assert.deepStrictEqual(
+    KO.revenueByCustomerType(DELIVS, SIZES, customers, "2026-06"),
+    [{ type: "restaurant", amount: 77 }, { type: "private", amount: 18 }]
+  );
+});
+
+test("revenueByCustomerType defaults missing/unknown type to restaurant", () => {
+  const customers = [{ id: "A", name: "Palm Spot" }]; // no type; B not listed at all
+  assert.deepStrictEqual(
+    KO.revenueByCustomerType(DELIVS, SIZES, customers, "2026-06"),
+    [{ type: "restaurant", amount: 95 }]
+  );
+});
+
+test("generateRecibo includes a NIF line under the header when provided", () => {
+  const ds = [
+    { customerId: "C", date: "2026-06-10",
+      items: [{ sizeId: "1L", flavourId: "a", quantity: 2 }], empties: [] },
+  ];
+  const out = KO.generateRecibo(ds, "C", "2026-06", SIZES, "OUT - Kombucha Produto", "511073712");
+  assert.ok(out.startsWith("OUT - Kombucha Produto\nNIF: 511073712\n\n"));
+  assert.ok(out.endsWith("Total: 16.00 Euro"));
+});
+
+test("generateRecibo omits the NIF line when nif is empty/missing", () => {
+  const ds = [
+    { customerId: "C", date: "2026-06-10",
+      items: [{ sizeId: "1L", flavourId: "a", quantity: 2 }], empties: [] },
+  ];
+  const noArg = KO.generateRecibo(ds, "C", "2026-06", SIZES, "OUT - Kombucha Produto");
+  const emptyArg = KO.generateRecibo(ds, "C", "2026-06", SIZES, "OUT - Kombucha Produto", "  ");
+  assert.ok(!noArg.includes("NIF:"));
+  assert.ok(!emptyArg.includes("NIF:"));
+  assert.ok(noArg.startsWith("OUT - Kombucha Produto\n\n"));
+});

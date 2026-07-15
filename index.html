@@ -458,5 +458,49 @@
     A.renderers.dashboard = render;
   });
   </script>
+
+  <script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const A = window.APP, KO = window.KO;
+    const container = document.getElementById("view-recibo");
+
+    function currentMonthKey() {
+      const d = new Date();
+      return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
+    }
+
+    function render() {
+      if (!A.state.settings) { container.innerHTML = "<p class='muted'>Loading…</p>"; return; }
+      const custId = A.current.reciboCust || "";
+      const mk = A.current.reciboMonth || (A.current.reciboMonth = currentMonthKey());
+      const custOpts = `<option value="">— choose —</option>` + A.state.customers
+        .slice().sort((a, b) => a.name.localeCompare(b.name))
+        .map((c) => `<option value="${c.id}" ${c.id === custId ? "selected" : ""}>${c.name}</option>`).join("");
+
+      let text = "";
+      if (custId) text = KO.generateRecibo(A.state.deliveries, custId, mk, A.state.settings.sizes, A.state.settings.reciboHeader);
+
+      container.innerHTML =
+        `<div class="card">` +
+        `<label>Customer</label><select id="rcust">${custOpts}</select>` +
+        `<label>Month</label><input id="rmonth" type="month" value="${mk}"/>` +
+        `</div>` +
+        (custId ? `<div class="card"><pre id="rtext">${text.replace(/</g, "&lt;")}</pre>` +
+          `<button class="primary" id="copyBtn">Copy to clipboard</button>` +
+          `<p id="copyMsg" class="muted"></p></div>`
+          : `<p class="muted">Choose a customer to generate the recibo text.</p>`);
+
+      container.querySelector("#rcust").addEventListener("change", (e) => { A.current.reciboCust = e.target.value; render(); });
+      container.querySelector("#rmonth").addEventListener("change", (e) => { A.current.reciboMonth = e.target.value; render(); });
+      const copyBtn = container.querySelector("#copyBtn");
+      if (copyBtn) copyBtn.addEventListener("click", async () => {
+        try { await navigator.clipboard.writeText(text); container.querySelector("#copyMsg").textContent = "Copied ✓"; }
+        catch (e) { container.querySelector("#copyMsg").textContent = "Copy failed — select the text manually."; }
+      });
+    }
+
+    A.renderers.recibo = render;
+  });
+  </script>
 </body>
 </html>

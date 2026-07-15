@@ -332,7 +332,7 @@ test("monthlyRevenueSeries follows the key order", () => {
 test("flavourCounts sorted desc", () => {
   assert.deepStrictEqual(KO.flavourCounts(DELIVS, "2026-06"), [
     { flavourId: "lem", quantity: 10 },
-    { flavourId: "gin", quantity: 6 },
+    { flavourId: "gin", quantity: 8 },
   ]);
 });
 ```

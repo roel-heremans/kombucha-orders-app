@@ -105,3 +105,40 @@ test("outstandingByCustomer nets delivered minus returned per size", () => {
     { customerId: "A", perSize: { "270ml": 3 }, depositHeld: 3 },
   ]); // 270ml: 10-7=3 (deposit 3); 1L: 2-2=0 omitted
 });
+
+test("generateRecibo matches the June example exactly", () => {
+  const ds = [
+    { customerId: "C", date: "2026-06-03",
+      items: [{ sizeId: "1L", flavourId: "a", quantity: 2 }],
+      empties: [{ sizeId: "270ml", quantity: 7 }] },
+    { customerId: "C", date: "2026-06-10",
+      items: [{ sizeId: "1L", flavourId: "a", quantity: 2 },
+              { sizeId: "270ml", flavourId: "b", quantity: 10 }],
+      empties: [] },
+    { customerId: "C", date: "2026-06-24",
+      items: [{ sizeId: "1L", flavourId: "a", quantity: 2 }], empties: [] },
+    { customerId: "OTHER", date: "2026-06-05",
+      items: [{ sizeId: "1L", flavourId: "a", quantity: 99 }], empties: [] },
+  ];
+  const expected = [
+    "OUT - Kombucha Produto",
+    "",
+    "June 3:  2x 1L = 16.00",
+    "June 10: 2x 1L + 10x 270ml = 61.00",
+    "June 24: 2x 1L = 16.00",
+    "Return June 3: 7x 270ml = -7.00",
+    "----------------------------------",
+    "Total: 86.00 Euro",
+  ].join("\n");
+  assert.strictEqual(
+    KO.generateRecibo(ds, "C", "2026-06", SIZES, "OUT - Kombucha Produto"),
+    expected
+  );
+});
+
+test("generateRecibo with no deliveries", () => {
+  assert.strictEqual(
+    KO.generateRecibo([], "C", "2026-06", SIZES, "OUT - Kombucha Produto"),
+    "OUT - Kombucha Produto\n\nTotal: 0.00 Euro"
+  );
+});

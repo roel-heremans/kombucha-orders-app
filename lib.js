@@ -113,5 +113,72 @@
     });
   }
 
-  return { formatMoney, sizeById, deliveryRevenue, deliveryDepositRefund, monthKey, inMonth, monthName, dayOfMonth, recentMonthKeys, monthlyRevenue, revenueByCustomer, monthlyRevenueSeries, flavourCounts, outstandingByCustomer };
+  function reciboSizeLabel(size) {
+    return size.label.replace(/\s+/g, "");
+  }
+
+  function generateRecibo(deliveries, customerId, mk, sizes, header) {
+    const mine = deliveries
+      .filter(function (d) { return d.customerId === customerId && inMonth(d.date, mk); })
+      .slice()
+      .sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+
+    const deliveryLines = [];
+    const labelParts = []; // {label, content, subtotal}
+    let total = 0;
+
+    mine.forEach(function (d) {
+      const parts = [];
+      sizes.forEach(function (s) {
+        const qty = (d.items || []).reduce(function (sum, it) {
+          return it.sizeId === s.id ? sum + it.quantity : sum;
+        }, 0);
+        if (qty > 0) parts.push(qty + "x " + reciboSizeLabel(s));
+      });
+      if (parts.length === 0) return;
+      const subtotal = deliveryRevenue(d, sizes);
+      total += subtotal;
+      labelParts.push({
+        label: monthName(mk) + " " + dayOfMonth(d.date) + ":",
+        content: parts.join(" + ") + " = " + formatMoney(subtotal),
+      });
+    });
+
+    const labelWidth = labelParts.reduce(function (w, p) {
+      return Math.max(w, p.label.length);
+    }, 0);
+    labelParts.forEach(function (p) {
+      deliveryLines.push(p.label.padEnd(labelWidth, " ") + " " + p.content);
+    });
+
+    const returnLines = [];
+    mine.forEach(function (d) {
+      const parts = [];
+      let refund = 0;
+      sizes.forEach(function (s) {
+        if (s.deposit <= 0) return;
+        const qty = (d.empties || []).reduce(function (sum, e) {
+          return e.sizeId === s.id ? sum + e.quantity : sum;
+        }, 0);
+        if (qty > 0) { parts.push(qty + "x " + reciboSizeLabel(s)); refund += qty * s.deposit; }
+      });
+      if (parts.length === 0) return;
+      total -= refund;
+      returnLines.push("Return " + monthName(mk) + " " + dayOfMonth(d.date) + ": " +
+        parts.join(" + ") + " = -" + formatMoney(refund));
+    });
+
+    const totalLine = "Total: " + formatMoney(total) + " Euro";
+    const body = deliveryLines.concat(returnLines);
+    if (body.length === 0) return header + "\n\n" + totalLine;
+
+    const longest = body.concat([totalLine]).reduce(function (w, l) {
+      return Math.max(w, l.length);
+    }, 0);
+    const separator = "-".repeat(longest);
+
+    return [header, ""].concat(body).concat([separator, totalLine]).join("\n");
+  }
+
+  return { formatMoney, sizeById, deliveryRevenue, deliveryDepositRefund, monthKey, inMonth, monthName, dayOfMonth, recentMonthKeys, monthlyRevenue, revenueByCustomer, monthlyRevenueSeries, flavourCounts, outstandingByCustomer, reciboSizeLabel, generateRecibo };
 });

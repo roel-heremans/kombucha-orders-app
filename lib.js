@@ -27,5 +27,29 @@
     }, 0);
   }
 
-  return { formatMoney, sizeById, deliveryRevenue, deliveryDepositRefund };
+  const MONTH_NAMES = ["January","February","March","April","May","June",
+    "July","August","September","October","November","December"];
+
+  function monthKey(dateStr) { return dateStr.slice(0, 7); }
+
+  function inMonth(dateStr, mk) { return monthKey(dateStr) === mk; }
+
+  function monthName(mk) { return MONTH_NAMES[parseInt(mk.slice(5, 7), 10) - 1]; }
+
+  function dayOfMonth(dateStr) { return parseInt(dateStr.slice(8, 10), 10); }
+
+  function recentMonthKeys(endMk, n) {
+    let year = parseInt(endMk.slice(0, 4), 10);
+    let month = parseInt(endMk.slice(5, 7), 10); // 1-12
+    const keys = [];
+    for (let i = 0; i < n; i++) {
+      const mm = String(month).padStart(2, "0");
+      keys.unshift(year + "-" + mm);
+      month--;
+      if (month === 0) { month = 12; year--; }
+    }
+    return keys;
+  }
+
+  return { formatMoney, sizeById, deliveryRevenue, deliveryDepositRefund, monthKey, inMonth, monthName, dayOfMonth, recentMonthKeys };
 });

@@ -34,3 +34,21 @@ test("deliveryDepositRefund sums qty x deposit", () => {
   const d = { items: [], empties: [{ sizeId: "270ml", quantity: 7 }, { sizeId: "1L", quantity: 3 }] };
   assert.strictEqual(KO.deliveryDepositRefund(d, SIZES), 7); // 7*1 + 3*0
 });
+
+test("monthKey / inMonth / dayOfMonth", () => {
+  assert.strictEqual(KO.monthKey("2026-06-03"), "2026-06");
+  assert.strictEqual(KO.inMonth("2026-06-03", "2026-06"), true);
+  assert.strictEqual(KO.inMonth("2026-07-01", "2026-06"), false);
+  assert.strictEqual(KO.dayOfMonth("2026-06-03"), 3);
+});
+
+test("monthName is English", () => {
+  assert.strictEqual(KO.monthName("2026-06"), "June");
+  assert.strictEqual(KO.monthName("2026-01"), "January");
+});
+
+test("recentMonthKeys returns n keys oldest-first ending at endMk", () => {
+  assert.deepStrictEqual(KO.recentMonthKeys("2026-02", 4), [
+    "2025-11", "2025-12", "2026-01", "2026-02",
+  ]);
+});

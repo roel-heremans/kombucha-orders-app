@@ -408,5 +408,55 @@
     A.renderers.deliveries = render;
   });
   </script>
+
+  <script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const A = window.APP, KO = window.KO;
+    const container = document.getElementById("view-dashboard");
+
+    function currentMonthKey() {
+      const d = new Date();
+      return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
+    }
+
+    function render() {
+      const sizes = A.state.settings ? A.state.settings.sizes : [];
+      const mk = A.current.dashMonth || (A.current.dashMonth = currentMonthKey());
+      const revenue = KO.monthlyRevenue(A.state.deliveries, sizes, mk);
+      const byCust = KO.revenueByCustomer(A.state.deliveries, sizes, mk);
+      const series = KO.monthlyRevenueSeries(A.state.deliveries, sizes, KO.recentMonthKeys(mk, 6));
+      const outstanding = KO.outstandingByCustomer(A.state.deliveries, sizes);
+      const flavours = KO.flavourCounts(A.state.deliveries, mk);
+
+      const revChart = KO.barChartSVG(series.map((s) => ({ label: KO.monthName(s.monthKey).slice(0, 3), value: s.amount })));
+      const custChart = KO.barChartSVG(byCust.map((c) => ({ label: A.customerName(c.customerId).slice(0, 6), value: c.amount })));
+
+      container.innerHTML =
+        `<div class="card"><label>Month</label><input id="dashMonth" type="month" value="${mk}"/></div>` +
+        `<div class="card"><h3>Revenue: €${KO.formatMoney(revenue)}</h3>${revChart}</div>` +
+        `<div class="card"><h4>By customer</h4>` +
+          (byCust.length ? custChart + "<table>" + byCust.map((c) =>
+            `<tr><td>${A.customerName(c.customerId)}</td><td>€${KO.formatMoney(c.amount)}</td></tr>`).join("") + "</table>"
+            : "<p class='muted'>No revenue this month.</p>") + `</div>` +
+        `<div class="card"><h4>Outstanding bottles & deposit</h4>` +
+          (outstanding.length ? "<table><tr><th>Customer</th><th>Out</th><th>Deposit</th></tr>" +
+            outstanding.map((o) =>
+              `<tr><td>${A.customerName(o.customerId)}</td>` +
+              `<td>${Object.keys(o.perSize).map((sid) => o.perSize[sid] + "× " + sid).join(", ") || "0"}</td>` +
+              `<td>€${KO.formatMoney(o.depositHeld)}</td></tr>`).join("") + "</table>"
+            : "<p class='muted'>Nothing outstanding.</p>") + `</div>` +
+        `<div class="card"><h4>Flavour popularity (${KO.monthName(mk)})</h4>` +
+          (flavours.length ? "<table>" + flavours.map((f) =>
+            `<tr><td>${A.flavourName(f.flavourId)}</td><td>${f.quantity}</td></tr>`).join("") + "</table>"
+            : "<p class='muted'>No deliveries this month.</p>") + `</div>`;
+
+      container.querySelector("#dashMonth").addEventListener("change", (e) => {
+        A.current.dashMonth = e.target.value; render();
+      });
+    }
+
+    A.renderers.dashboard = render;
+  });
+  </script>
 </body>
 </html>

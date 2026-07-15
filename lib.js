@@ -87,5 +87,31 @@
       .sort(function (a, b) { return b.quantity - a.quantity; });
   }
 
-  return { formatMoney, sizeById, deliveryRevenue, deliveryDepositRefund, monthKey, inMonth, monthName, dayOfMonth, recentMonthKeys, monthlyRevenue, revenueByCustomer, monthlyRevenueSeries, flavourCounts };
+  function outstandingByCustomer(deliveries, sizes) {
+    const byCust = {};
+    deliveries.forEach(function (d) {
+      const per = byCust[d.customerId] || (byCust[d.customerId] = {});
+      (d.items || []).forEach(function (it) {
+        per[it.sizeId] = (per[it.sizeId] || 0) + it.quantity;
+      });
+      (d.empties || []).forEach(function (e) {
+        per[e.sizeId] = (per[e.sizeId] || 0) - e.quantity;
+      });
+    });
+    return Object.keys(byCust).sort().map(function (cid) {
+      const perRaw = byCust[cid];
+      const perSize = {};
+      let depositHeld = 0;
+      Object.keys(perRaw).forEach(function (sid) {
+        const net = perRaw[sid];
+        if (net === 0) return;
+        perSize[sid] = net;
+        const s = sizeById(sizes, sid);
+        if (s) depositHeld += net * s.deposit;
+      });
+      return { customerId: cid, perSize: perSize, depositHeld: depositHeld };
+    });
+  }
+
+  return { formatMoney, sizeById, deliveryRevenue, deliveryDepositRefund, monthKey, inMonth, monthName, dayOfMonth, recentMonthKeys, monthlyRevenue, revenueByCustomer, monthlyRevenueSeries, flavourCounts, outstandingByCustomer };
 });

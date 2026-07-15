@@ -91,3 +91,17 @@ test("flavourCounts sorted desc", () => {
     { flavourId: "gin", quantity: 8 },
   ]);
 });
+
+test("outstandingByCustomer nets delivered minus returned per size", () => {
+  const ds = [
+    { customerId: "A", date: "2026-06-03",
+      items: [{ sizeId: "270ml", flavourId: "x", quantity: 10 },
+              { sizeId: "1L", flavourId: "y", quantity: 2 }],
+      empties: [{ sizeId: "270ml", quantity: 7 }] },
+    { customerId: "A", date: "2026-06-10",
+      items: [], empties: [{ sizeId: "1L", quantity: 2 }] },
+  ];
+  assert.deepStrictEqual(KO.outstandingByCustomer(ds, SIZES), [
+    { customerId: "A", perSize: { "270ml": 3 }, depositHeld: 3 },
+  ]); // 270ml: 10-7=3 (deposit 3); 1L: 2-2=0 omitted
+});

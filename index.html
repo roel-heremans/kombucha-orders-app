@@ -441,8 +441,13 @@
       const flavours = KO.flavourCounts(A.state.deliveries, mk);
       const byType = KO.revenueByCustomerType(A.state.deliveries, sizes, A.state.customers, mk);
 
-      const revChart = KO.barChartSVG(series.map((s) => ({ label: KO.monthName(s.monthKey).slice(0, 3), value: s.amount })));
-      const custChart = KO.barChartSVG(byCust.map((c) => ({ label: A.customerName(c.customerId).slice(0, 6), value: c.amount })));
+      const euro = (v) => "€" + KO.formatMoney(v);
+      const revChart = KO.barChartSVG(
+        series.map((s) => ({ label: KO.monthName(s.monthKey).slice(0, 3), title: KO.monthName(s.monthKey) + " " + s.monthKey.slice(0, 4), value: s.amount })),
+        { format: euro });
+      const custChart = KO.barChartSVG(
+        byCust.map((c) => ({ label: A.customerName(c.customerId).slice(0, 6), title: A.customerName(c.customerId), value: c.amount })),
+        { format: euro });
 
       container.innerHTML =
         `<div class="card"><label>Month</label><input id="dashMonth" type="month" value="${mk}"/></div>` +

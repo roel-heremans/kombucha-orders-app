@@ -209,6 +209,7 @@
     const width = opts.width || 320;
     const height = opts.height || 160;
     const color = opts.color || "#4a7c59";
+    const fmt = opts.format || function (v) { return String(v); };
     const pad = 24;
     const chartH = height - pad * 2;
     const max = data.reduce(function (m, d) { return Math.max(m, d.value); }, 0) || 1;
@@ -220,9 +221,10 @@
       const h = (d.value / max) * chartH;
       const x = pad + slot * i + (slot - barW) / 2;
       const y = pad + (chartH - h);
+      const titleText = (d.title != null ? d.title : d.label) + ": " + fmt(d.value);
       bars += '<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) +
         '" width="' + barW.toFixed(1) + '" height="' + h.toFixed(1) +
-        '" fill="' + color + '"/>';
+        '" fill="' + color + '"><title>' + escapeXml(titleText) + "</title></rect>";
       bars += '<text x="' + (x + barW / 2).toFixed(1) + '" y="' + (height - 6) +
         '" font-size="9" text-anchor="middle" fill="currentColor">' +
         escapeXml(d.label) + "</text>";

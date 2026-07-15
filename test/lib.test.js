@@ -157,6 +157,20 @@ test("barChartSVG handles empty data", () => {
   assert.strictEqual((svg.match(/<rect/g) || []).length, 0);
 });
 
+test("barChartSVG adds a hover <title> per bar, default raw value", () => {
+  const svg = KO.barChartSVG([{ label: "A", value: 5 }]);
+  assert.ok(svg.includes("<title>A: 5</title>"));
+});
+
+test("barChartSVG title uses opts.format and an optional full title", () => {
+  const svg = KO.barChartSVG(
+    [{ label: "Pal", title: "Palm Spot", value: 64 }],
+    { format: (v) => "€" + v.toFixed(2) }
+  );
+  assert.ok(svg.includes("<title>Palm Spot: €64.00</title>"));
+  assert.ok(svg.includes(">Pal</text>")); // axis label stays short
+});
+
 test("revenueByCustomerType groups by customer type, default restaurant", () => {
   const customers = [
     { id: "A", name: "Palm Spot", type: "restaurant" },

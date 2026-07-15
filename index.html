@@ -70,6 +70,8 @@
       from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
     import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager }
       from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+    import { collection, doc, onSnapshot, addDoc, setDoc, updateDoc, deleteDoc, getDoc }
+      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
     // Replace with your Firebase web app config (see docs/FIREBASE_SETUP.md)
     const FIREBASE_CONFIG = {
@@ -127,6 +129,63 @@
         if (window.APP.onViewShown) window.APP.onViewShown(btn.dataset.view);
       });
     });
+
+    const S = window.APP.state;
+    window.APP.renderers = {};
+
+    window.APP.render = function () {
+      const active = document.querySelector("nav button.active");
+      const view = active ? active.dataset.view : "new";
+      if (window.APP.renderers[view]) window.APP.renderers[view]();
+    };
+    window.APP.onViewShown = function (view) {
+      if (window.APP.renderers[view]) window.APP.renderers[view]();
+    };
+
+    window.APP.customerName = (id) => (S.customers.find((c) => c.id === id) || {}).name || "(unknown)";
+    window.APP.flavourName = (id) => (S.flavours.find((f) => f.id === id) || {}).name || "(unknown)";
+
+    const DEFAULT_SETTINGS = {
+      reciboHeader: "OUT - Kombucha Produto",
+      sizes: [
+        { id: "1L", label: "1 L", price: 8, deposit: 0 },
+        { id: "270ml", label: "270 ml", price: 4.5, deposit: 1 },
+      ],
+    };
+
+    function watch(name, target) {
+      onSnapshot(collection(db, name), (snap) => {
+        target.length = 0;
+        snap.forEach((d) => target.push(Object.assign({ id: d.id }, d.data())));
+        window.APP.render();
+      });
+    }
+
+    window.APP.onLogin = async function () {
+      // Seed settings on first run.
+      const settingsRef = doc(db, "settings", "app");
+      const existing = await getDoc(settingsRef);
+      if (!existing.exists()) await setDoc(settingsRef, DEFAULT_SETTINGS);
+      onSnapshot(settingsRef, (d) => {
+        S.settings = d.exists() ? d.data() : DEFAULT_SETTINGS;
+        window.APP.render();
+      });
+      watch("customers", S.customers);
+      watch("flavours", S.flavours);
+      watch("deliveries", S.deliveries);
+      window.APP.render();
+    };
+
+    // CRUD
+    window.APP.addDelivery = (o) => addDoc(collection(db, "deliveries"), o);
+    window.APP.updateDelivery = (id, o) => updateDoc(doc(db, "deliveries", id), o);
+    window.APP.deleteDelivery = (id) => deleteDoc(doc(db, "deliveries", id));
+    window.APP.addCustomer = (name, notes) => addDoc(collection(db, "customers"), { name, notes: notes || "" });
+    window.APP.updateCustomer = (id, o) => updateDoc(doc(db, "customers", id), o);
+    window.APP.deleteCustomer = (id) => deleteDoc(doc(db, "customers", id));
+    window.APP.addFlavour = (name) => addDoc(collection(db, "flavours"), { name });
+    window.APP.deleteFlavour = (id) => deleteDoc(doc(db, "flavours", id));
+    window.APP.saveSettings = (o) => setDoc(doc(db, "settings", "app"), o);
   </script>
 </body>
 </html>

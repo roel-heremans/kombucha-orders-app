@@ -87,6 +87,7 @@
 
     // Expose to later-task code via a single namespace.
     window.APP = { app, auth, db, state: { customers: [], flavours: [], deliveries: [], settings: null }, current: {} };
+    window.APP.esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
 
     // Online/offline banner
     const banner = document.getElementById("offlineBanner");
@@ -197,18 +198,18 @@
 
     function sizeOptions(selected) {
       return (A.state.settings ? A.state.settings.sizes : [])
-        .map((s) => `<option value="${s.id}" ${s.id === selected ? "selected" : ""}>${s.label}</option>`).join("");
+        .map((s) => `<option value="${s.id}" ${s.id === selected ? "selected" : ""}>${A.esc(s.label)}</option>`).join("");
     }
     function flavourOptionsHtml(selected) {
       const opts = A.state.flavours
         .slice().sort((a, b) => a.name.localeCompare(b.name))
-        .map((f) => `<option value="${f.id}" ${f.id === selected ? "selected" : ""}>${f.name}</option>`).join("");
+        .map((f) => `<option value="${f.id}" ${f.id === selected ? "selected" : ""}>${A.esc(f.name)}</option>`).join("");
       return opts + `<option value="__new__">➕ Add new flavour…</option>`;
     }
     function customerOptionsHtml(selected) {
       const opts = A.state.customers
         .slice().sort((a, b) => a.name.localeCompare(b.name))
-        .map((c) => `<option value="${c.id}" ${c.id === selected ? "selected" : ""}>${c.name}</option>`).join("");
+        .map((c) => `<option value="${c.id}" ${c.id === selected ? "selected" : ""}>${A.esc(c.name)}</option>`).join("");
       return `<option value="">— choose customer —</option>` + opts + `<option value="__new__">➕ Add new customer…</option>`;
     }
 
@@ -251,7 +252,7 @@
 
     function emptiesRows() {
       return (A.state.settings ? A.state.settings.sizes : []).map((s) =>
-        `<div class="row"><div><label>${s.label} empties back</label>` +
+        `<div class="row"><div><label>${A.esc(s.label)} empties back</label>` +
         `<input class="emp-qty" data-size="${s.id}" type="number" min="0" value="0"/></div></div>`).join("");
     }
 
@@ -378,7 +379,14 @@
     function itemSummary(d, sizes) {
       return (d.items || []).map((it) => {
         const s = KO.sizeById(sizes, it.sizeId);
-        return it.quantity + "× " + (s ? s.label : it.sizeId) + " " + A.flavourName(it.flavourId);
+        return it.quantity + "× " + A.esc(s ? s.label : it.sizeId) + " " + A.esc(A.flavourName(it.flavourId));
+      }).join(", ");
+    }
+
+    function emptiesSummary(d, sizes) {
+      return (d.empties || []).map((e) => {
+        const s = KO.sizeById(sizes, e.sizeId);
+        return e.quantity + "× " + A.esc(s ? s.label : e.sizeId);
       }).join(", ");
     }
 
@@ -388,10 +396,10 @@
       if (list.length === 0) { container.innerHTML = "<p class='muted'>No deliveries yet.</p>"; return; }
       container.innerHTML = list.map((d) =>
         `<div class="card">` +
-        `<strong>${A.customerName(d.customerId)}</strong> — ${d.date}<br/>` +
+        `<strong>${A.esc(A.customerName(d.customerId))}</strong> — ${d.date}<br/>` +
         `<span class="muted">${itemSummary(d, sizes)}</span><br/>` +
         `Revenue: €${KO.formatMoney(KO.deliveryRevenue(d, sizes))}` +
-        ((d.empties || []).length ? ` · Empties back: ${(d.empties).map((e) => e.quantity + "× " + e.sizeId).join(", ")}` : "") +
+        ((d.empties || []).length ? ` · Empties back: ${emptiesSummary(d, sizes)}` : "") +
         `<div style="margin-top:8px">` +
         `<button class="link" data-edit="${d.id}">Edit</button> · ` +
         `<button class="link" data-del="${d.id}">Delete</button></div>` +
@@ -436,18 +444,18 @@
         `<div class="card"><h3>Revenue: €${KO.formatMoney(revenue)}</h3>${revChart}</div>` +
         `<div class="card"><h4>By customer</h4>` +
           (byCust.length ? custChart + "<table>" + byCust.map((c) =>
-            `<tr><td>${A.customerName(c.customerId)}</td><td>€${KO.formatMoney(c.amount)}</td></tr>`).join("") + "</table>"
+            `<tr><td>${A.esc(A.customerName(c.customerId))}</td><td>€${KO.formatMoney(c.amount)}</td></tr>`).join("") + "</table>"
             : "<p class='muted'>No revenue this month.</p>") + `</div>` +
         `<div class="card"><h4>Outstanding bottles & deposit</h4>` +
           (outstanding.length ? "<table><tr><th>Customer</th><th>Out</th><th>Deposit</th></tr>" +
             outstanding.map((o) =>
-              `<tr><td>${A.customerName(o.customerId)}</td>` +
-              `<td>${Object.keys(o.perSize).map((sid) => o.perSize[sid] + "× " + sid).join(", ") || "0"}</td>` +
+              `<tr><td>${A.esc(A.customerName(o.customerId))}</td>` +
+              `<td>${Object.keys(o.perSize).map((sid) => { const s = KO.sizeById(sizes, sid); return o.perSize[sid] + "× " + A.esc(s ? s.label : sid); }).join(", ") || "0"}</td>` +
               `<td>€${KO.formatMoney(o.depositHeld)}</td></tr>`).join("") + "</table>"
             : "<p class='muted'>Nothing outstanding.</p>") + `</div>` +
         `<div class="card"><h4>Flavour popularity (${KO.monthName(mk)})</h4>` +
           (flavours.length ? "<table>" + flavours.map((f) =>
-            `<tr><td>${A.flavourName(f.flavourId)}</td><td>${f.quantity}</td></tr>`).join("") + "</table>"
+            `<tr><td>${A.esc(A.flavourName(f.flavourId))}</td><td>${f.quantity}</td></tr>`).join("") + "</table>"
             : "<p class='muted'>No deliveries this month.</p>") + `</div>`;
 
       container.querySelector("#dashMonth").addEventListener("change", (e) => {
@@ -475,7 +483,7 @@
       const mk = A.current.reciboMonth || (A.current.reciboMonth = currentMonthKey());
       const custOpts = `<option value="">— choose —</option>` + A.state.customers
         .slice().sort((a, b) => a.name.localeCompare(b.name))
-        .map((c) => `<option value="${c.id}" ${c.id === custId ? "selected" : ""}>${c.name}</option>`).join("");
+        .map((c) => `<option value="${c.id}" ${c.id === custId ? "selected" : ""}>${A.esc(c.name)}</option>`).join("");
 
       let text = "";
       if (custId) text = KO.generateRecibo(A.state.deliveries, custId, mk, A.state.settings.sizes, A.state.settings.reciboHeader);
@@ -485,7 +493,7 @@
         `<label>Customer</label><select id="rcust">${custOpts}</select>` +
         `<label>Month</label><input id="rmonth" type="month" value="${mk}"/>` +
         `</div>` +
-        (custId ? `<div class="card"><pre id="rtext">${text.replace(/</g, "&lt;")}</pre>` +
+        (custId ? `<div class="card"><pre id="rtext">${A.esc(text)}</pre>` +
           `<button class="primary" id="copyBtn">Copy to clipboard</button>` +
           `<p id="copyMsg" class="muted"></p></div>`
           : `<p class="muted">Choose a customer to generate the recibo text.</p>`);
@@ -521,21 +529,21 @@
         `<div class="card"><h4>Bottle sizes & prices</h4>` +
           st.sizes.map((s, i) =>
             `<div class="row" data-idx="${i}">` +
-            `<div><label>Label</label><input class="s-label" value="${s.label}"/></div>` +
+            `<div><label>Label</label><input class="s-label" value="${A.esc(s.label)}"/></div>` +
             `<div><label>Price €</label><input class="s-price" type="number" step="0.5" value="${s.price}"/></div>` +
             `<div><label>Deposit €</label><input class="s-dep" type="number" step="0.5" value="${s.deposit}"/></div>` +
             `</div>`).join("") +
-          `<label>Recibo header text</label><input id="recHeader" value="${st.reciboHeader}"/>` +
+          `<label>Recibo header text</label><input id="recHeader" value="${A.esc(st.reciboHeader)}"/>` +
           `<button class="primary" id="saveSettings">Save settings</button>` +
           `<p id="setMsg" class="muted"></p></div>` +
         `<div class="card"><h4>Customers</h4>` +
           A.state.customers.slice().sort((a,b)=>a.name.localeCompare(b.name)).map((c) =>
-            `<div class="row"><div>${c.name}</div>` +
+            `<div class="row"><div>${A.esc(c.name)}</div>` +
             `<button class="link" data-delcust="${c.id}" style="flex:0 0 60px">Delete</button></div>`).join("") +
           `</div>` +
         `<div class="card"><h4>Flavours</h4>` +
           A.state.flavours.slice().sort((a,b)=>a.name.localeCompare(b.name)).map((f) =>
-            `<div class="row"><div>${f.name}</div>` +
+            `<div class="row"><div>${A.esc(f.name)}</div>` +
             `<button class="link" data-delflav="${f.id}" style="flex:0 0 60px">Delete</button></div>`).join("") +
           `</div>` +
         `<div class="card"><h4>Backup</h4>` +

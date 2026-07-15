@@ -369,5 +369,44 @@
     A.renderers.new = renderNew;
   });
   </script>
+
+  <script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const A = window.APP, KO = window.KO;
+    const container = document.getElementById("view-deliveries");
+
+    function itemSummary(d, sizes) {
+      return (d.items || []).map((it) => {
+        const s = KO.sizeById(sizes, it.sizeId);
+        return it.quantity + "× " + (s ? s.label : it.sizeId) + " " + A.flavourName(it.flavourId);
+      }).join(", ");
+    }
+
+    function render() {
+      const sizes = A.state.settings ? A.state.settings.sizes : [];
+      const list = A.state.deliveries.slice().sort((a, b) => (a.date < b.date ? 1 : -1));
+      if (list.length === 0) { container.innerHTML = "<p class='muted'>No deliveries yet.</p>"; return; }
+      container.innerHTML = list.map((d) =>
+        `<div class="card">` +
+        `<strong>${A.customerName(d.customerId)}</strong> — ${d.date}<br/>` +
+        `<span class="muted">${itemSummary(d, sizes)}</span><br/>` +
+        `Revenue: €${KO.formatMoney(KO.deliveryRevenue(d, sizes))}` +
+        ((d.empties || []).length ? ` · Empties back: ${(d.empties).map((e) => e.quantity + "× " + e.sizeId).join(", ")}` : "") +
+        `<div style="margin-top:8px">` +
+        `<button class="link" data-edit="${d.id}">Edit</button> · ` +
+        `<button class="link" data-del="${d.id}">Delete</button></div>` +
+        `</div>`).join("");
+
+      container.querySelectorAll("[data-edit]").forEach((b) =>
+        b.addEventListener("click", () => A.editDelivery(b.dataset.edit)));
+      container.querySelectorAll("[data-del]").forEach((b) =>
+        b.addEventListener("click", async () => {
+          if (confirm("Delete this delivery?")) await A.deleteDelivery(b.dataset.del);
+        }));
+    }
+
+    A.renderers.deliveries = render;
+  });
+  </script>
 </body>
 </html>

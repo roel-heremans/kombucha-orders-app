@@ -39,11 +39,48 @@ Firestore, so two people can enter deliveries and see the same stats.
 - Firebase (Firestore + Email/Password auth) loaded from CDN.
 - Hosted on GitHub Pages.
 
-## Setup
+## Run locally
 
-Firebase project setup and hosting steps will be documented here during
-implementation. Firebase web config values are public by design; access is
-protected by Firestore security rules limited to the two known accounts.
+No build step and no dependencies. From the repo root:
+
+```bash
+python3 -m http.server 8000
+```
+
+Then open http://localhost:8000 in your browser. Note that Firebase features
+(login, data sync) require `FIREBASE_CONFIG` in `index.html` to be filled in —
+see "Firebase setup" below.
+
+## Firebase setup
+
+One-time setup of the Firebase project (Authentication, Firestore, and the
+`FIREBASE_CONFIG` values in `index.html`) is documented in
+[`docs/FIREBASE_SETUP.md`](docs/FIREBASE_SETUP.md).
+
+Firebase web config values are public by design; access is protected by
+Firestore security rules ([`firestore.rules`](firestore.rules)) limited to
+the two known accounts.
+
+## Deploy (GitHub Pages)
+
+This is a static site, so GitHub Pages can serve it directly from `main`:
+
+1. In the GitHub repo, go to **Settings → Pages**.
+2. Under **Source**, choose "Deploy from a branch".
+3. Set **Branch** to `main` and the folder to `/ (root)`, then **Save**.
+4. GitHub Pages will publish the site at
+   `https://roel-heremans.github.io/kombucha-orders-app/` (the URL becomes
+   live a minute or two after Pages is enabled).
+
+## Add to Home Screen
+
+On iPhone (Safari):
+
+1. Open the published URL.
+2. Tap the **Share** icon.
+3. Tap **Add to Home Screen**.
+
+The app then opens full-screen from your home screen like a native app.
 
 ## License
 

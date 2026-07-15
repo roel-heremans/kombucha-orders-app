@@ -13,30 +13,47 @@ in returnable bottles.
 ## Architecture
 
 - **Single-file web app**: one `index.html` with inline CSS and JavaScript. No
-  build step, no dependencies. Follows the existing `handpan/resonote.html`
-  pattern.
+  build step. Follows the existing `handpan/resonote.html` pattern. The only
+  external dependency is the Firebase JS SDK, loaded from a CDN.
 - **Hosting**: GitHub Pages. On iPhone, added to the home screen
-  (Share → Add to Home Screen) for an app-like experience. Works offline.
-- **Storage**: browser `localStorage` on the device. A single JSON document
-  holds all data.
-- **Backup / Restore**: an "Export" button downloads the JSON document as a
-  file (can be saved/emailed to self); an "Import" button restores from such a
-  file. This is the backup and cross-device transfer mechanism — there is no
-  server and no account.
-- **Charts**: drawn as hand-rolled inline SVG. No external charting library, so
-  the app stays a single self-contained offline file.
+  (Share → Add to Home Screen) for an app-like experience.
+- **Storage — shared cloud (Firebase Firestore)**: all data lives in a single
+  Firestore project so both phones always see the same data. Firestore's
+  **offline persistence** is enabled, so deliveries can be entered without
+  signal and sync automatically when the phone reconnects (important for
+  on-the-road deliveries).
+- **Authentication (two accounts)**: Firebase Email/Password auth. Roel and his
+  wife each have their own account; both read and write the **same shared
+  data**. Each delivery records which account entered it (`enteredBy`).
+  Firestore **security rules** restrict all access to those two accounts only.
+- **Backup**: an "Export" button downloads the full dataset as a JSON file as an
+  extra safety net (Firestore is the source of truth; export is belt-and-braces,
+  not the sync mechanism).
+- **Charts**: drawn as hand-rolled inline SVG. No external charting library.
 
 ### Why this approach
 
 Matches the proven handpan setup (single file, GitHub Pages, iPhone home
-screen, zero install). A backend/cloud sync was considered and rejected as
-unnecessary complexity for a single-user, single-phone workflow; export/import
-covers backup and the rare multi-device need.
+screen). Firestore adds shared, real-time, offline-capable sync between the two
+phones with minimal backend code and no cost at this volume (Firebase free
+tier). Config values (`apiKey`, project id, etc.) are public by design in a
+Firebase web app — access is protected by the security rules, not by hiding the
+config.
+
+## Firebase setup (one-time, guided during implementation)
+
+1. Create a Firebase project (free Spark plan).
+2. Enable **Email/Password** authentication; create the two user accounts.
+3. Create a **Firestore** database.
+4. Add **security rules** allowing read/write only to the two known account
+   UIDs (an allowlist). No public sign-up in the app — login only.
+5. Register a Web App and copy its config into `index.html`.
 
 ## Data Model
 
-Stored as one JSON object in `localStorage` under a single key
-(e.g. `kombucha-tracker-v1`).
+Data lives in Firestore. Suggested layout: top-level collections
+`customers`, `flavours`, `deliveries`, and a single `settings` document holding
+sizes/prices. The shapes below describe each document.
 
 ```
 {
@@ -63,7 +80,9 @@ Stored as one JSON object in `localStorage` under a single key
         { "sizeId": "270ml", "quantity": 5 },
         { "sizeId": "1L",    "quantity": 0 }
       ],
-      "note": ""
+      "note": "",
+      "enteredBy": "roel@example.com",
+      "createdAt": "2026-07-15T10:00:00Z"
     }
   ]
 }
@@ -84,6 +103,7 @@ Stored as one JSON object in `localStorage` under a single key
   - `items`: line items of `{ size, flavour, quantity }`.
   - `empties`: bottles received back on this delivery, **per size**.
   - optional free-text note.
+  - `enteredBy`: which account created it (for the two-person workflow).
 
 ### Derived values
 
@@ -96,7 +116,15 @@ Stored as one JSON object in `localStorage` under a single key
 
 ## Screens
 
-Single-page app with a simple bottom or top nav between four views.
+Single-page app with a simple bottom or top nav. A **Login** screen gates the
+app; once logged in, Firebase remembers the session so it does not need to be
+re-entered on every open.
+
+### 0. Login
+
+- Email + password fields, "Log in" button (no public sign-up — the two accounts
+  are created once in the Firebase console).
+- Shows the logged-in account and a "Log out" action somewhere in Settings.
 
 ### 1. New / Edit Delivery
 
@@ -129,7 +157,8 @@ Single-page app with a simple bottom or top nav between four views.
 - Manage **sizes**: label, price, deposit; add new size.
 - Manage **customers**: rename, edit notes, (optionally) remove.
 - Manage **flavours**: rename, (optionally) remove.
-- **Export** (download JSON backup) and **Import** (restore from JSON).
+- **Export** a full JSON backup (extra safety net).
+- Shows the current account and a **Log out** button.
 
 ## Deposits vs Revenue
 
@@ -144,23 +173,24 @@ Kept separate to keep monthly income figures clean:
 
 - Empty/invalid form fields (no customer, zero-quantity items) are blocked on
   save with a clear message.
-- Deleting a customer or flavour that is used by deliveries: warn and either
-  block or keep historical deliveries intact (decision deferred to plan;
-  default = block deletion while in use).
-- Import validates the JSON shape and `version`; on mismatch it reports an error
-  rather than corrupting current data. A confirmation is required before import
-  overwrites existing data.
-- `localStorage` write failures (quota/private mode) surface a visible warning.
+- Deleting a customer or flavour that is used by deliveries is **blocked** while
+  in use, so historical deliveries stay intact.
+- **Offline / network**: when a phone has no signal, Firestore serves cached
+  data and queues writes; the app shows an "offline — will sync" indicator and
+  syncs automatically on reconnect.
+- **Auth errors** (wrong password, no network at login) show a clear message.
+- **Concurrent edits**: with two users this is rare; last write wins per
+  delivery document, which is acceptable at this scale.
 
 ## Testing
 
-- Pure logic (revenue totals, outstanding-bottle and deposit calculations,
-  import validation) factored into small functions that can be unit-tested.
+- Pure logic (revenue totals, outstanding-bottle and deposit calculations)
+  factored into small functions that can be unit-tested.
 - Manual test checklist for the UI flows on a phone-sized viewport.
 
 ## Out of scope (YAGNI)
 
-- Multi-user accounts, cloud sync, server backend.
+- Public sign-up / more than the two known accounts, role permissions.
 - Invoicing / PDF generation.
 - Payment tracking (paid/unpaid) — only revenue is computed.
 - Per-customer negotiated prices (single global price per size for now).

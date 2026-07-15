@@ -226,7 +226,7 @@
         `<div><label>Flavour</label><select class="it-flav">${flavourOptionsHtml(item.flavourId)}</select></div>` +
         `<div style="flex:0 0 64px"><label>Qty</label><input class="it-qty" type="number" min="1" value="${item.quantity}"/></div>` +
         `<button class="link it-del" style="flex:0 0 32px">✕</button>`;
-      div.querySelector(".it-flav").addEventListener("change", onFlavourChange);
+      div.querySelector(".it-flav").addEventListener("change", (e) => onFlavourChange(e).then(updateSubtotal));
       div.querySelector(".it-qty").addEventListener("input", updateSubtotal);
       div.querySelector(".it-size").addEventListener("change", updateSubtotal);
       div.querySelector(".it-del").addEventListener("click", (e) => { e.preventDefault(); div.remove(); updateSubtotal(); });

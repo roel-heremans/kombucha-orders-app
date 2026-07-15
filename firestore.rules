@@ -4,8 +4,8 @@ service cloud.firestore {
     function allowed() {
       return request.auth != null &&
         request.auth.token.email in [
-          "REPLACE_WITH_ACCOUNT_1@example.com",
-          "REPLACE_WITH_ACCOUNT_2@example.com"
+          "roel.heremans@gmail.com",
+          "reissnina@gmail.com"
         ];
     }
     match /{document=**} {

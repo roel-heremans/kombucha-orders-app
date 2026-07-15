@@ -208,7 +208,7 @@
       const opts = A.state.flavours
         .slice().sort((a, b) => a.name.localeCompare(b.name))
         .map((f) => `<option value="${f.id}" ${f.id === selected ? "selected" : ""}>${A.esc(f.name)}</option>`).join("");
-      return opts + `<option value="__new__">➕ Add new flavour…</option>`;
+      return `<option value="">— choose flavour —</option>` + opts + `<option value="__new__">➕ Add new flavour…</option>`;
     }
     function customerOptionsHtml(selected) {
       const opts = A.state.customers

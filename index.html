@@ -451,9 +451,10 @@
 
       container.innerHTML =
         `<div class="card"><label>Month</label><input id="dashMonth" type="month" value="${mk}"/></div>` +
-        `<div class="card"><h3>Revenue: €${KO.formatMoney(revenue)}</h3>${revChart}</div>` +
+        `<div class="card"><h3>Revenue: €${KO.formatMoney(revenue)}</h3>` +
+          `<div class="chartwrap"><div class="chart-tip muted">Tap a bar to see its value</div>${revChart}</div></div>` +
         `<div class="card"><h4>By customer</h4>` +
-          (byCust.length ? custChart + "<table>" + byCust.map((c) =>
+          (byCust.length ? `<div class="chartwrap"><div class="chart-tip muted">Tap a bar to see its value</div>${custChart}</div>` + "<table>" + byCust.map((c) =>
             `<tr><td>${A.esc(A.customerName(c.customerId))}</td><td>€${KO.formatMoney(c.amount)}</td></tr>`).join("") + "</table>"
             : "<p class='muted'>No revenue this month.</p>") + `</div>` +
         `<div class="card"><h4>By customer type</h4>` +
@@ -476,6 +477,16 @@
         A.current.dashMonth = e.target.value; render();
       });
     }
+
+    // One delegated listener (bars are re-created on every render): tap a bar to
+    // show its value in that chart's caption. Works for touch and mouse.
+    container.addEventListener("click", (e) => {
+      const bar = e.target.closest ? e.target.closest("[data-tip]") : null;
+      if (!bar) return;
+      const wrap = bar.closest(".chartwrap");
+      const tip = wrap && wrap.querySelector(".chart-tip");
+      if (tip) tip.textContent = bar.getAttribute("data-tip");
+    });
 
     A.renderers.dashboard = render;
   });

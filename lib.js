@@ -222,7 +222,8 @@
       const x = pad + slot * i + (slot - barW) / 2;
       const y = pad + (chartH - h);
       const titleText = (d.title != null ? d.title : d.label) + ": " + fmt(d.value);
-      bars += '<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) +
+      bars += '<rect class="bar" data-tip="' + escapeXml(titleText) +
+        '" style="cursor:pointer" x="' + x.toFixed(1) + '" y="' + y.toFixed(1) +
         '" width="' + barW.toFixed(1) + '" height="' + h.toFixed(1) +
         '" fill="' + color + '"><title>' + escapeXml(titleText) + "</title></rect>";
       bars += '<text x="' + (x + barW / 2).toFixed(1) + '" y="' + (height - 6) +

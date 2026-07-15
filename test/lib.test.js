@@ -157,9 +157,10 @@ test("barChartSVG handles empty data", () => {
   assert.strictEqual((svg.match(/<rect/g) || []).length, 0);
 });
 
-test("barChartSVG adds a hover <title> per bar, default raw value", () => {
+test("barChartSVG adds a hover <title> and tappable data-tip per bar", () => {
   const svg = KO.barChartSVG([{ label: "A", value: 5 }]);
   assert.ok(svg.includes("<title>A: 5</title>"));
+  assert.ok(svg.includes('data-tip="A: 5"'));
 });
 
 test("barChartSVG title uses opts.format and an optional full title", () => {

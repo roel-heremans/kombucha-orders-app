@@ -1,0 +1,9 @@
+{
+  "name": "kombucha-orders-app",
+  "version": "1.0.0",
+  "description": "Kombucha delivery tracker",
+  "private": true,
+  "scripts": {
+    "test": "node --test"
+  }
+}

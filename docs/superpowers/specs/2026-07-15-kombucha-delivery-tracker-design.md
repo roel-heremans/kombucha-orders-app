@@ -58,6 +58,7 @@ sizes/prices. The shapes below describe each document.
 ```
 {
   "version": 1,
+  "reciboHeader": "OUT - Kombucha Produto",
   "sizes": [
     { "id": "1L",    "label": "1 L",     "price": 8.0, "deposit": 0.0 },
     { "id": "270ml", "label": "270 ml",  "price": 4.5, "deposit": 1.0 }
@@ -113,6 +114,9 @@ sizes/prices. The shapes below describe each document.
   size − Σ empties returned of that size, across all that customer's deliveries.
 - **Deposit held** = Σ over sizes (outstanding bottles × size.deposit). Only
   270 ml contributes today.
+- **Recibo total** (per customer per month) = Σ delivery revenue in the month −
+  Σ (returned bottles × size.deposit) in the month. This nets deposits out and
+  matches the Finanças invoice total.
 
 ## Screens
 
@@ -158,7 +162,42 @@ re-entered on every open.
 - Manage **customers**: rename, edit notes, (optionally) remove.
 - Manage **flavours**: rename, (optionally) remove.
 - **Export** a full JSON backup (extra safety net).
+- **Recibo header text**: editable string (default `OUT - Kombucha Produto`)
+  used at the top of the generated recibo description.
 - Shows the current account and a **Log out** button.
+
+### 5. Recibo Verde (monthly tax export)
+
+Generates the description text to paste into the Portuguese Finanças recibo
+verde GUI, one customer + one month at a time.
+
+- **Inputs**: customer (dropdown) + month picker.
+- **Output**: a read-only text block with a **Copy** button, formatted **by
+  date** (chosen format):
+
+  ```
+  OUT - Kombucha Produto
+
+  June 3:  2x 1L = 16.00
+  June 10: 2x 1L + 10x 270ml = 61.00
+  June 24: 2x 1L = 16.00
+  Return June 3: 7x 270ml = -7.00
+  ----------------------------
+  Total: 86.00 Euro
+  ```
+
+- Rules:
+  - One line per delivery date that has delivered bottles, listing each size as
+    `<qty>x <size label>` (aggregated across flavours for that size), then that
+    date's subtotal = Σ qty × sale price.
+  - Each date with returned empties adds a `Return <month> <day>: <qty>x <size>
+    = -<qty × deposit>` line (only sizes with a non-zero deposit produce a
+    money value; zero-deposit returns like 1 L are stock-only and are **not**
+    listed on the recibo).
+  - Amounts formatted with two decimals; final `Total:` = Σ subtotals −
+    Σ deposit refunds. This matches the invoice total (product sales net of
+    deposits), which differs from the dashboard's product-only "revenue".
+  - The header line is the configurable Recibo header text.
 
 ## Deposits vs Revenue
 

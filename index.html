@@ -189,22 +189,23 @@
   </script>
 
   <script>
-  (function () {
+  document.addEventListener("DOMContentLoaded", function () {
     const A = window.APP, KO = window.KO;
     const container = document.getElementById("view-new");
     let editing = null; // delivery id being edited, or null
+    let built = false;  // whether the form shell is currently built
 
     function sizeOptions(selected) {
       return (A.state.settings ? A.state.settings.sizes : [])
         .map((s) => `<option value="${s.id}" ${s.id === selected ? "selected" : ""}>${s.label}</option>`).join("");
     }
-    function flavourOptions(selected) {
+    function flavourOptionsHtml(selected) {
       const opts = A.state.flavours
         .slice().sort((a, b) => a.name.localeCompare(b.name))
         .map((f) => `<option value="${f.id}" ${f.id === selected ? "selected" : ""}>${f.name}</option>`).join("");
       return opts + `<option value="__new__">➕ Add new flavour…</option>`;
     }
-    function customerOptions(selected) {
+    function customerOptionsHtml(selected) {
       const opts = A.state.customers
         .slice().sort((a, b) => a.name.localeCompare(b.name))
         .map((c) => `<option value="${c.id}" ${c.id === selected ? "selected" : ""}>${c.name}</option>`).join("");
@@ -217,7 +218,7 @@
       div.className = "row item-row";
       div.innerHTML =
         `<div><label>Size</label><select class="it-size">${sizeOptions(item.sizeId)}</select></div>` +
-        `<div><label>Flavour</label><select class="it-flav">${flavourOptions(item.flavourId)}</select></div>` +
+        `<div><label>Flavour</label><select class="it-flav">${flavourOptionsHtml(item.flavourId)}</select></div>` +
         `<div style="flex:0 0 64px"><label>Qty</label><input class="it-qty" type="number" min="1" value="${item.quantity}"/></div>` +
         `<button class="link it-del" style="flex:0 0 32px">✕</button>`;
       div.querySelector(".it-flav").addEventListener("change", onFlavourChange);
@@ -228,14 +229,24 @@
     }
 
     async function onFlavourChange(e) {
-      if (e.target.value === "__new__") {
+      const sel = e.target;
+      if (sel.value === "__new__") {
         const name = prompt("New flavour name:");
         if (name && name.trim()) {
           const ref = await A.addFlavour(name.trim());
-          // Re-render options; select the new flavour once it arrives via snapshot.
-          e.target.dataset.pending = name.trim();
-        } else { e.target.value = ""; }
+          refreshOptions();
+          sel.value = ref.id;
+        } else { sel.value = ""; }
       }
+    }
+
+    // Repopulate dropdown option lists from current state, preserving selections.
+    function refreshOptions() {
+      const custSel = container.querySelector("#cust");
+      if (custSel) { const v = custSel.value; custSel.innerHTML = customerOptionsHtml(v); custSel.value = v; }
+      container.querySelectorAll(".it-flav").forEach((sel) => {
+        const v = sel.value; sel.innerHTML = flavourOptionsHtml(v); sel.value = v;
+      });
     }
 
     function emptiesRows() {
@@ -279,12 +290,11 @@
       return new Date(d.getTime() - off * 60000).toISOString().slice(0, 10);
     }
 
-    function renderNew() {
-      if (!A.state.settings) { container.innerHTML = "<p class='muted'>Loading…</p>"; return; }
+    function buildForm() {
       container.innerHTML =
         `<div class="card">` +
         `<h3>${editing ? "Edit" : "New"} delivery</h3>` +
-        `<label>Customer</label><select id="cust">${customerOptions("")}</select>` +
+        `<label>Customer</label><select id="cust">${customerOptionsHtml("")}</select>` +
         `<label>Date</label><input id="date" type="date" value="${todayStr()}"/>` +
         `<h4>Bottles delivered</h4><div id="items"></div>` +
         `<button class="link" id="addItem">➕ Add line</button>` +
@@ -302,14 +312,21 @@
       container.querySelector("#cust").addEventListener("change", async (e) => {
         if (e.target.value === "__new__") {
           const name = prompt("New customer name:");
-          if (name && name.trim()) { await A.addCustomer(name.trim()); e.target.dataset.pending = name.trim(); }
+          if (name && name.trim()) { const ref = await A.addCustomer(name.trim()); refreshOptions(); e.target.value = ref.id; }
           else e.target.value = "";
         }
       });
       container.querySelector("#addItem").addEventListener("click", (e) => { e.preventDefault(); itemsDiv.appendChild(itemRow()); });
       container.querySelector("#save").addEventListener("click", onSave);
-      if (editing) container.querySelector("#cancelEdit").addEventListener("click", (e) => { e.preventDefault(); editing = null; renderNew(); });
+      if (editing) container.querySelector("#cancelEdit").addEventListener("click", (e) => { e.preventDefault(); editing = null; built = false; renderNew(); });
+      built = true;
       updateSubtotal();
+    }
+
+    function renderNew() {
+      if (!A.state.settings) { container.innerHTML = "<p class='muted'>Loading…</p>"; built = false; return; }
+      if (built && container.querySelector("#cust")) { refreshOptions(); return; }
+      buildForm();
     }
 
     async function onSave(e) {
@@ -322,8 +339,9 @@
       try {
         if (editing) { await A.updateDelivery(editing, d); editing = null; }
         else { d.enteredBy = A.user ? A.user.email : ""; await A.addDelivery(d); }
+        built = false;
         renderNew();
-        err.textContent = "Saved ✓";
+        container.querySelector("#formErr").textContent = "Saved ✓";
       } catch (ex) { err.textContent = "Save failed: " + ex.message; }
     }
 
@@ -331,6 +349,7 @@
       const d = A.state.deliveries.find((x) => x.id === id);
       if (!d) return;
       editing = id;
+      built = false;
       renderNew();
       container.querySelector("#cust").value = d.customerId;
       container.querySelector("#date").value = d.date;
@@ -344,12 +363,11 @@
       });
       container.querySelector("#note").value = d.note || "";
       updateSubtotal();
-      // switch to this view
       document.querySelector('nav button[data-view="new"]').click();
     };
 
     A.renderers.new = renderNew;
-  })();
+  });
   </script>
 </body>
 </html>

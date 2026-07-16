@@ -604,18 +604,6 @@
       return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
     }
 
-    function resolveWindow(w) {
-      const cur = currentMonthKey();
-      if (w.preset === "last-month") { const p = KO.recentMonthKeys(cur, 2)[0]; return { startMk: p, endMk: p }; }
-      if (w.preset === "this-year") { return { startMk: cur.slice(0, 4) + "-01", endMk: cur }; }
-      if (w.preset === "custom") {
-        let s = w.startMk || cur, e = w.endMk || cur;
-        if (s > e) s = e;
-        return { startMk: s, endMk: e };
-      }
-      return { startMk: cur, endMk: cur }; // this-month (default)
-    }
-
     function euro(v) { return "€" + KO.formatMoney(v); }
 
     function legendHtml(items) {
@@ -643,7 +631,7 @@
     function render() {
       const sizes = A.state.settings ? A.state.settings.sizes : [];
       const w = A.current.dashWindow || (A.current.dashWindow = { preset: "this-month" });
-      const { startMk, endMk } = resolveWindow(w);
+      const { startMk, endMk } = KO.resolveWindow(w.preset, w.startMk, w.endMk, currentMonthKey());
       const label = KO.windowLabel(startMk, endMk);
 
       const monthKeys = KO.monthKeysBetween(startMk, endMk);

@@ -344,3 +344,24 @@ test("stackedBarChartSVG tolerates empty data", () => {
   assert.match(svg, /^<svg /);
   assert.strictEqual((svg.match(/<rect/g) || []).length, 0);
 });
+
+test("resolveWindow this-month (and unknown preset) returns current month", () => {
+  assert.deepStrictEqual(KO.resolveWindow("this-month", null, null, "2026-07"), { startMk: "2026-07", endMk: "2026-07" });
+  assert.deepStrictEqual(KO.resolveWindow("bogus", null, null, "2026-07"), { startMk: "2026-07", endMk: "2026-07" });
+});
+
+test("resolveWindow last-month crosses the January boundary", () => {
+  assert.deepStrictEqual(KO.resolveWindow("last-month", null, null, "2026-01"), { startMk: "2025-12", endMk: "2025-12" });
+  assert.deepStrictEqual(KO.resolveWindow("last-month", null, null, "2026-07"), { startMk: "2026-06", endMk: "2026-06" });
+});
+
+test("resolveWindow this-year is year-to-date (start===end in January)", () => {
+  assert.deepStrictEqual(KO.resolveWindow("this-year", null, null, "2026-07"), { startMk: "2026-01", endMk: "2026-07" });
+  assert.deepStrictEqual(KO.resolveWindow("this-year", null, null, "2026-01"), { startMk: "2026-01", endMk: "2026-01" });
+});
+
+test("resolveWindow custom uses the pickers and collapses an inverted range", () => {
+  assert.deepStrictEqual(KO.resolveWindow("custom", "2026-03", "2026-05", "2026-07"), { startMk: "2026-03", endMk: "2026-05" });
+  assert.deepStrictEqual(KO.resolveWindow("custom", "2026-08", "2026-03", "2026-07"), { startMk: "2026-03", endMk: "2026-03" });
+  assert.deepStrictEqual(KO.resolveWindow("custom", null, null, "2026-07"), { startMk: "2026-07", endMk: "2026-07" });
+});

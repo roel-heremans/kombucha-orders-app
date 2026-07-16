@@ -51,6 +51,18 @@
     return keys;
   }
 
+  function resolveWindow(preset, startMk, endMk, curMk) {
+    if (preset === "last-month") { const p = recentMonthKeys(curMk, 2)[0]; return { startMk: p, endMk: p }; }
+    if (preset === "this-year") { return { startMk: curMk.slice(0, 4) + "-01", endMk: curMk }; }
+    if (preset === "custom") {
+      let s = startMk || curMk, e = endMk || curMk;
+      if (s > e) s = e;
+      return { startMk: s, endMk: e };
+    }
+    return { startMk: curMk, endMk: curMk }; // this-month (default)
+  }
+
+  // Callers pass startMk <= endMk (see resolveWindow); an inverted range returns [endMk].
   function monthKeysBetween(startMk, endMk) {
     if (startMk > endMk) return [endMk];
     let y = parseInt(startMk.slice(0, 4), 10);
@@ -380,5 +392,5 @@
     });
   }
 
-  return { formatMoney, sizeById, deliveryRevenue, deliveryDepositRefund, monthKey, inMonth, monthName, dayOfMonth, recentMonthKeys, monthKeysBetween, inWindow, revenueInWindow, revenueByCustomerInWindow, flavourCountsInWindow, windowLabel, monthlyRevenue, revenueByCustomer, monthlyRevenueSeries, flavourCounts, revenueByCustomerType, outstandingByCustomer, reciboSizeLabel, generateRecibo, orderItemsSummary, orderStatusLabel, barChartSVG, stackedBarChartSVG, revenueByTypeInWindow, revenueTypeSeries, revenueTypeByYear };
+  return { formatMoney, sizeById, deliveryRevenue, deliveryDepositRefund, monthKey, inMonth, monthName, dayOfMonth, recentMonthKeys, resolveWindow, monthKeysBetween, inWindow, revenueInWindow, revenueByCustomerInWindow, flavourCountsInWindow, windowLabel, monthlyRevenue, revenueByCustomer, monthlyRevenueSeries, flavourCounts, revenueByCustomerType, outstandingByCustomer, reciboSizeLabel, generateRecibo, orderItemsSummary, orderStatusLabel, barChartSVG, stackedBarChartSVG, revenueByTypeInWindow, revenueTypeSeries, revenueTypeByYear };
 });

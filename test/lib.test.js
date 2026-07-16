@@ -315,3 +315,32 @@ test("revenueTypeByYear aggregates per year ascending", () => {
   const out = KO.revenueTypeByYear(DELIVS, SIZES, CUSTS);
   assert.deepStrictEqual(out, [{ year: "2026", private: 18, restaurant: 85, total: 103 }]);
 });
+
+test("stackedBarChartSVG renders an svg with a rect per segment and the tip", () => {
+  const bars = [
+    { label: "Jun", tip: "Jun 2026 — Total €95", segments: [
+      { value: 18, color: "#3d6b8c" }, { value: 77, color: "#4a7c59" }] },
+    { label: "Jul", tip: "Jul 2026 — Total €8", segments: [
+      { value: 0, color: "#3d6b8c" }, { value: 8, color: "#4a7c59" }] },
+  ];
+  const svg = KO.stackedBarChartSVG(bars, { width: 320, height: 160 });
+  assert.match(svg, /^<svg /);
+  assert.strictEqual((svg.match(/<rect/g) || []).length, 4); // 2 bars x 2 segments
+  assert.match(svg, /data-tip="Jun 2026 — Total €95"/);
+  assert.match(svg, /fill="#4a7c59"/);
+  assert.match(svg, /fill="#3d6b8c"/);
+  assert.match(svg, />Jun</);
+});
+
+test("stackedBarChartSVG escapes the tip text", () => {
+  const svg = KO.stackedBarChartSVG(
+    [{ label: "X", tip: "a & b <c>", segments: [{ value: 1, color: "#000" }] }], {});
+  assert.match(svg, /data-tip="a &amp; b &lt;c&gt;"/);
+  assert.doesNotMatch(svg, /data-tip="a & b <c>"/);
+});
+
+test("stackedBarChartSVG tolerates empty data", () => {
+  const svg = KO.stackedBarChartSVG([], {});
+  assert.match(svg, /^<svg /);
+  assert.strictEqual((svg.match(/<rect/g) || []).length, 0);
+});

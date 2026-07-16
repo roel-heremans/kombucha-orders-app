@@ -306,6 +306,41 @@
       '" width="100%" role="img">' + bars + "</svg>";
   }
 
+  function stackedBarChartSVG(bars, opts) {
+    opts = opts || {};
+    const width = opts.width || 320;
+    const height = opts.height || 160;
+    const pad = 24;
+    const chartH = height - pad * 2;
+    const sums = bars.map(function (b) {
+      return (b.segments || []).reduce(function (s, seg) { return s + seg.value; }, 0);
+    });
+    const max = sums.reduce(function (m, v) { return Math.max(m, v); }, 0) || 1;
+    const n = bars.length;
+    const slot = n > 0 ? (width - pad * 2) / n : 0;
+    const barW = slot * 0.6;
+    let out = "";
+    bars.forEach(function (b, i) {
+      const x = pad + slot * i + (slot - barW) / 2;
+      let yCursor = pad + chartH; // bottom baseline
+      const tip = escapeXml(b.tip || "");
+      (b.segments || []).forEach(function (seg) {
+        const h = (seg.value / max) * chartH;
+        const y = yCursor - h;
+        out += '<rect class="bar" data-tip="' + tip + '" style="cursor:pointer" x="' +
+          x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + barW.toFixed(1) +
+          '" height="' + Math.max(0, h).toFixed(1) + '" fill="' + seg.color +
+          '"><title>' + tip + "</title></rect>";
+        yCursor = y;
+      });
+      out += '<text x="' + (x + barW / 2).toFixed(1) + '" y="' + (height - 6) +
+        '" font-size="9" text-anchor="middle" fill="currentColor">' +
+        escapeXml(b.label) + "</text>";
+    });
+    return '<svg viewBox="0 0 ' + width + " " + height +
+      '" width="100%" role="img">' + out + "</svg>";
+  }
+
   function typeMap(customers) {
     const t = {};
     (customers || []).forEach(function (c) { t[c.id] = c.type === "private" ? "private" : "restaurant"; });
@@ -345,5 +380,5 @@
     });
   }
 
-  return { formatMoney, sizeById, deliveryRevenue, deliveryDepositRefund, monthKey, inMonth, monthName, dayOfMonth, recentMonthKeys, monthKeysBetween, inWindow, revenueInWindow, revenueByCustomerInWindow, flavourCountsInWindow, windowLabel, monthlyRevenue, revenueByCustomer, monthlyRevenueSeries, flavourCounts, revenueByCustomerType, outstandingByCustomer, reciboSizeLabel, generateRecibo, orderItemsSummary, orderStatusLabel, barChartSVG, revenueByTypeInWindow, revenueTypeSeries, revenueTypeByYear };
+  return { formatMoney, sizeById, deliveryRevenue, deliveryDepositRefund, monthKey, inMonth, monthName, dayOfMonth, recentMonthKeys, monthKeysBetween, inWindow, revenueInWindow, revenueByCustomerInWindow, flavourCountsInWindow, windowLabel, monthlyRevenue, revenueByCustomer, monthlyRevenueSeries, flavourCounts, revenueByCustomerType, outstandingByCustomer, reciboSizeLabel, generateRecibo, orderItemsSummary, orderStatusLabel, barChartSVG, stackedBarChartSVG, revenueByTypeInWindow, revenueTypeSeries, revenueTypeByYear };
 });

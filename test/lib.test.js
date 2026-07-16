@@ -379,3 +379,21 @@ test("reciboDocId builds a deterministic customer_month id", () => {
   assert.strictEqual(KO.reciboDocId("abc123", "2026-07"), "abc123_2026-07");
   assert.strictEqual(KO.reciboDocId("x", "2025-12"), "x_2025-12");
 });
+
+test("orderEmailParams assembles template fields", () => {
+  const order = { items: [{ sizeId: "1L", flavourId: "gin", quantity: 8 }], preferredDate: "2026-07-20", note: "before noon" };
+  const p = KO.orderEmailParams(order, "Sun Spot", SIZES, (id) => ({ gin: "Ginger" }[id] || id), "Jul 17, 2026");
+  assert.strictEqual(p.restaurant_name, "Sun Spot");
+  assert.strictEqual(p.items, "8x 1 L Ginger");
+  assert.strictEqual(p.preferred_date, "2026-07-20");
+  assert.strictEqual(p.note, "before noon");
+  assert.strictEqual(p.placed_at, "Jul 17, 2026");
+});
+
+test("orderEmailParams uses — for empty date/note and tolerates no placedAt", () => {
+  const p = KO.orderEmailParams({ items: [] }, "X", SIZES);
+  assert.strictEqual(p.preferred_date, "—");
+  assert.strictEqual(p.note, "—");
+  assert.strictEqual(p.items, "");
+  assert.strictEqual(p.placed_at, "");
+});

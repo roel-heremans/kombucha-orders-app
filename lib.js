@@ -280,6 +280,16 @@
     }).join(", ");
   }
 
+  function orderEmailParams(order, restaurantName, sizes, flavourName, placedAt) {
+    return {
+      restaurant_name: restaurantName,
+      items: orderItemsSummary(order, sizes, flavourName),
+      preferred_date: (order && order.preferredDate) || "—",
+      note: (order && order.note) || "—",
+      placed_at: placedAt || "",
+    };
+  }
+
   function orderStatusLabel(status) {
     if (status === "delivered") return "✅ Delivered";
     if (status === "cancelled") return "✖ Cancelled";
@@ -407,5 +417,5 @@
     });
   }
 
-  return { formatMoney, sizeById, deliveryRevenue, deliveryDepositRefund, monthKey, inMonth, monthName, dayOfMonth, recentMonthKeys, resolveWindow, monthKeysBetween, inWindow, revenueInWindow, revenueByCustomerInWindow, flavourCountsInWindow, windowLabel, monthlyRevenue, revenueByCustomer, monthlyRevenueSeries, flavourCounts, revenueByCustomerType, outstandingByCustomer, reciboSizeLabel, reciboDocId, generateRecibo, orderItemsSummary, orderStatusLabel, barChartSVG, stackedBarChartSVG, revenueByTypeInWindow, revenueTypeSeries, revenueTypeByYear };
+  return { formatMoney, sizeById, deliveryRevenue, deliveryDepositRefund, monthKey, inMonth, monthName, dayOfMonth, recentMonthKeys, resolveWindow, monthKeysBetween, inWindow, revenueInWindow, revenueByCustomerInWindow, flavourCountsInWindow, windowLabel, monthlyRevenue, revenueByCustomer, monthlyRevenueSeries, flavourCounts, revenueByCustomerType, outstandingByCustomer, reciboSizeLabel, reciboDocId, generateRecibo, orderItemsSummary, orderEmailParams, orderStatusLabel, barChartSVG, stackedBarChartSVG, revenueByTypeInWindow, revenueTypeSeries, revenueTypeByYear };
 });

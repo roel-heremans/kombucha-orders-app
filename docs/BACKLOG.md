@@ -8,17 +8,6 @@ Status legend: 🟡 next · ⚪ planned · 💡 idea / deferred · ✅ done
 
 ---
 
-## Project B — Recibo Verde PDF distribution 🟡 (next)
-
-Separate subsystem — needs Firebase Storage, storage security rules, admin
-upload UI, and a restaurant download section.
-
-- **B1. Admin uploads** monthly Recibo Verde PDFs for a given restaurant + month.
-- **B2. Restaurant download** — a logged-in restaurant sees a section listing
-  their monthly RVs to download / print.
-
----
-
 ## Ideas / deferred 💡
 
 - **New-order notifications** — email and/or WhatsApp alert to Roel + Nina when a
@@ -33,6 +22,11 @@ upload UI, and a restaurant download section.
 
 ## Done ✅
 
+- **Project B — Recibo Verde PDF distribution**: admins upload a restaurant's
+  monthly RV PDF (base64 in Firestore, one-per-month replace, 700 KB cap,
+  %PDF-validated) from the Recibo view; restaurants download/print their own via
+  a "My Recibos" section. Two collections (`recibos` metadata + `reciboFiles`
+  bytes) with role-based rules (restaurant reads only its own). Free Spark plan.
 - **Project A — Dashboard analytics**: selectable time window (This month / Last
   month / This year / Custom range) driving all windowed stats; revenue split by
   customer type (Private/Restaurant/total) in a stacked monthly chart + window

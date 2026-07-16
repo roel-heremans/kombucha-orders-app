@@ -19,6 +19,11 @@ const DELIVS = [
     items: [{ sizeId: "1L", flavourId: "gin", quantity: 1 }], empties: [] },
 ];
 
+const CUSTS = [
+  { id: "A", name: "Alice", type: "restaurant" },
+  { id: "B", name: "Bob", type: "private" },
+];
+
 test("formatMoney formats to two decimals", () => {
   assert.strictEqual(KO.formatMoney(16), "16.00");
   assert.strictEqual(KO.formatMoney(4.5), "4.50");
@@ -285,4 +290,28 @@ test("windowLabel formats single month, same-year range, and cross-year range", 
   assert.strictEqual(KO.windowLabel("2026-07", "2026-07"), "Jul 2026");
   assert.strictEqual(KO.windowLabel("2026-01", "2026-07"), "Jan–Jul 2026");
   assert.strictEqual(KO.windowLabel("2025-11", "2026-02"), "Nov 2025–Feb 2026");
+});
+
+test("revenueByTypeInWindow splits private vs restaurant", () => {
+  // Window 2026-06..2026-07: A(restaurant)=16+61+8=85, B(private)=18
+  const out = KO.revenueByTypeInWindow(DELIVS, SIZES, CUSTS, "2026-06", "2026-07");
+  assert.deepStrictEqual(out, { private: 18, restaurant: 85, total: 103 });
+});
+
+test("revenueByTypeInWindow treats unknown/missing type as restaurant", () => {
+  const custs = [{ id: "A", name: "Alice" }]; // no type => restaurant; B absent => restaurant
+  const out = KO.revenueByTypeInWindow(DELIVS, SIZES, custs, "2026-06", "2026-07");
+  assert.deepStrictEqual(out, { private: 0, restaurant: 103, total: 103 });
+});
+
+test("revenueTypeSeries returns one entry per month key, in order", () => {
+  const out = KO.revenueTypeSeries(DELIVS, SIZES, CUSTS, ["2026-06", "2026-07"]);
+  assert.strictEqual(out.length, 2);
+  assert.deepStrictEqual(out[0], { monthKey: "2026-06", private: 18, restaurant: 77, total: 95 });
+  assert.deepStrictEqual(out[1], { monthKey: "2026-07", private: 0, restaurant: 8, total: 8 });
+});
+
+test("revenueTypeByYear aggregates per year ascending", () => {
+  const out = KO.revenueTypeByYear(DELIVS, SIZES, CUSTS);
+  assert.deepStrictEqual(out, [{ year: "2026", private: 18, restaurant: 85, total: 103 }]);
 });

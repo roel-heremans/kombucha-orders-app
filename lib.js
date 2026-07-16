@@ -306,5 +306,44 @@
       '" width="100%" role="img">' + bars + "</svg>";
   }
 
-  return { formatMoney, sizeById, deliveryRevenue, deliveryDepositRefund, monthKey, inMonth, monthName, dayOfMonth, recentMonthKeys, monthKeysBetween, inWindow, revenueInWindow, revenueByCustomerInWindow, flavourCountsInWindow, windowLabel, monthlyRevenue, revenueByCustomer, monthlyRevenueSeries, flavourCounts, revenueByCustomerType, outstandingByCustomer, reciboSizeLabel, generateRecibo, orderItemsSummary, orderStatusLabel, barChartSVG };
+  function typeMap(customers) {
+    const t = {};
+    (customers || []).forEach(function (c) { t[c.id] = c.type === "private" ? "private" : "restaurant"; });
+    return t;
+  }
+
+  function revenueByTypeInWindow(deliveries, sizes, customers, startMk, endMk) {
+    const t = typeMap(customers);
+    let priv = 0, rest = 0;
+    deliveries.forEach(function (d) {
+      if (!inWindow(d.date, startMk, endMk)) return;
+      const r = deliveryRevenue(d, sizes);
+      if ((t[d.customerId] || "restaurant") === "private") priv += r; else rest += r;
+    });
+    return { private: priv, restaurant: rest, total: priv + rest };
+  }
+
+  function revenueTypeSeries(deliveries, sizes, customers, monthKeys) {
+    return monthKeys.map(function (mk) {
+      const r = revenueByTypeInWindow(deliveries, sizes, customers, mk, mk);
+      return { monthKey: mk, private: r.private, restaurant: r.restaurant, total: r.total };
+    });
+  }
+
+  function revenueTypeByYear(deliveries, sizes, customers) {
+    const t = typeMap(customers);
+    const byYear = {};
+    deliveries.forEach(function (d) {
+      const y = d.date.slice(0, 4);
+      const e = byYear[y] || (byYear[y] = { private: 0, restaurant: 0 });
+      const r = deliveryRevenue(d, sizes);
+      if ((t[d.customerId] || "restaurant") === "private") e.private += r; else e.restaurant += r;
+    });
+    return Object.keys(byYear).sort().map(function (y) {
+      return { year: y, private: byYear[y].private, restaurant: byYear[y].restaurant,
+        total: byYear[y].private + byYear[y].restaurant };
+    });
+  }
+
+  return { formatMoney, sizeById, deliveryRevenue, deliveryDepositRefund, monthKey, inMonth, monthName, dayOfMonth, recentMonthKeys, monthKeysBetween, inWindow, revenueInWindow, revenueByCustomerInWindow, flavourCountsInWindow, windowLabel, monthlyRevenue, revenueByCustomer, monthlyRevenueSeries, flavourCounts, revenueByCustomerType, outstandingByCustomer, reciboSizeLabel, generateRecibo, orderItemsSummary, orderStatusLabel, barChartSVG, revenueByTypeInWindow, revenueTypeSeries, revenueTypeByYear };
 });

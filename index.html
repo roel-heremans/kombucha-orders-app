@@ -250,6 +250,7 @@
     window.APP.addOrder = (o) => addDoc(collection(db, "orders"), o);
     window.APP.cancelOrder = (id) => updateDoc(doc(db, "orders", id), { status: "cancelled" });
     window.APP.setOrderDelivered = (id, deliveryId) => updateDoc(doc(db, "orders", id), { status: "delivered", deliveryId });
+    window.APP.serverTimestamp = serverTimestamp;
   </script>
 
   <script>
@@ -782,6 +783,113 @@
     }
 
     A.renderers.settings = render;
+  });
+  </script>
+
+  <script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const A = window.APP, KO = window.KO;
+    const body = document.getElementById("restaurantBody");
+    const title = document.getElementById("restaurantTitle");
+
+    function sizeOptions() {
+      return (A.state.settings ? A.state.settings.sizes : [])
+        .map((s) => `<option value="${s.id}">${A.esc(s.label)}</option>`).join("");
+    }
+    function flavourOptions() {
+      return `<option value="">— choose flavour —</option>` +
+        A.state.flavours.slice().sort((a, b) => a.name.localeCompare(b.name))
+          .map((f) => `<option value="${f.id}">${A.esc(f.name)}</option>`).join("");
+    }
+    function itemRowHtml() {
+      return `<div class="row order-item">` +
+        `<div><label>Size</label><select class="oi-size">${sizeOptions()}</select></div>` +
+        `<div><label>Flavour</label><select class="oi-flav">${flavourOptions()}</select></div>` +
+        `<div style="flex:0 0 64px"><label>Qty</label><input class="oi-qty" type="number" min="1" value="1"/></div>` +
+        `<button class="link oi-del" style="flex:0 0 32px">✕</button></div>`;
+    }
+
+    function myOrders() {
+      const uid = A.user ? A.user.uid : null;
+      return A.state.orders.filter((o) => o.customerUid === uid).slice().sort((a, b) => {
+        const ta = (a.createdAt && a.createdAt.seconds) || 0;
+        const tb = (b.createdAt && b.createdAt.seconds) || 0;
+        return tb - ta;
+      });
+    }
+
+    function render() {
+      if (A.role !== "restaurant") return;
+      if (!A.state.settings) { body.innerHTML = "<p class='muted'>Loading…</p>"; return; }
+      if (!A.myCustomer) {
+        body.innerHTML = "<div class='card'><p>Your account isn't linked to a customer yet. Please contact us.</p></div>";
+        return;
+      }
+      title.textContent = A.myCustomer.name;
+      const sizes = A.state.settings.sizes;
+      const orders = myOrders();
+      body.innerHTML =
+        `<div class="card"><h3>New order</h3>` +
+          `<div id="orderItems">${itemRowHtml()}</div>` +
+          `<button class="link" id="addOrderLine">➕ Add line</button>` +
+          `<label>Preferred date (optional)</label><input id="orderDate" type="date"/>` +
+          `<label>Note (optional)</label><textarea id="orderNote" rows="2"></textarea>` +
+          `<p id="orderErr" class="muted"></p>` +
+          `<button class="primary" id="sendOrder">Send order</button></div>` +
+        `<div class="card"><h3>Your orders</h3>` +
+          (orders.length === 0 ? "<p class='muted'>No orders yet.</p>" :
+            orders.map((o) => {
+              const cancel = o.status === "requested"
+                ? ` <button class="link" data-cancelmine="${o.id}">Cancel</button>` : "";
+              return `<div class="row" style="justify-content:space-between">` +
+                `<div><div>${A.esc(KO.orderItemsSummary(o, sizes, A.flavourName))}</div>` +
+                `<div class="muted">${KO.orderStatusLabel(o.status)}${o.preferredDate ? " · " + A.esc(o.preferredDate) : ""}</div></div>` +
+                `<div>${cancel}</div></div>`;
+            }).join("")) +
+        `</div>`;
+
+      const itemsDiv = body.querySelector("#orderItems");
+      body.querySelector("#addOrderLine").addEventListener("click", (e) => {
+        e.preventDefault();
+        const tmp = document.createElement("div");
+        tmp.innerHTML = itemRowHtml();
+        itemsDiv.appendChild(tmp.firstElementChild);
+      });
+      itemsDiv.addEventListener("click", (e) => {
+        if (e.target.classList.contains("oi-del")) { e.preventDefault(); e.target.closest(".order-item").remove(); }
+      });
+      body.querySelector("#sendOrder").addEventListener("click", onSend);
+      body.querySelectorAll("[data-cancelmine]").forEach((b) =>
+        b.addEventListener("click", async () => {
+          if (confirm("Cancel this order?")) await A.cancelOrder(b.dataset.cancelmine);
+        }));
+    }
+
+    async function onSend() {
+      const err = body.querySelector("#orderErr");
+      const items = [];
+      body.querySelectorAll(".order-item").forEach((r) => {
+        const sizeId = r.querySelector(".oi-size").value;
+        const flavourId = r.querySelector(".oi-flav").value;
+        const quantity = parseInt(r.querySelector(".oi-qty").value, 10) || 0;
+        if (sizeId && flavourId && quantity > 0) items.push({ sizeId, flavourId, quantity });
+      });
+      if (items.length === 0) { err.textContent = "Add at least one bottle line with a flavour."; return; }
+      try {
+        await A.addOrder({
+          customerId: A.myCustomer.id,
+          customerUid: A.user.uid,
+          items,
+          preferredDate: body.querySelector("#orderDate").value || "",
+          note: body.querySelector("#orderNote").value.trim(),
+          status: "requested",
+          createdAt: A.serverTimestamp(),
+        });
+        err.textContent = "Order sent ✓";
+      } catch (ex) { err.textContent = "Send failed: " + ex.message; }
+    }
+
+    A.renderRestaurant = render;
   });
   </script>
 </body>

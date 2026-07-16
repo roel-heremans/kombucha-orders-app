@@ -9,12 +9,12 @@ It's a single `index.html` (no build step) hosted on GitHub Pages, meant to be
 added to your phone's home screen. Data is shared between devices via Firebase
 Firestore, so two people can enter deliveries and see the same stats.
 
-> Status: **design complete, implementation pending.** See the design spec in
+> Status: **Most features implemented.** Restaurant ordering is now live. See the design spec in
 > [`docs/superpowers/specs/`](docs/superpowers/specs/).
 
 ---
 
-## Features (planned)
+## Features (implemented)
 
 - **Enter a delivery** — customer (dropdown or add new), date, line items
   (bottle size + flavour + quantity), and empties received back per size.
@@ -25,6 +25,24 @@ Firestore, so two people can enter deliveries and see the same stats.
   (delivery dates, bottle types/amounts, deposit returns, and the netted total).
 - **Two-account shared data** — you and your wife each log in and see the same
   data, with offline support that syncs when back online.
+- **Restaurant self-ordering** — restaurants can place order requests from their own phone account.
+- **Orders tab** — admins see all pending restaurant orders and can fulfill them directly into the delivery form.
+
+## Restaurant ordering
+
+Restaurants can place order requests from their own phone:
+
+- An admin creates a login for the restaurant in **Settings → Restaurant
+  logins** (links it to that customer).
+- The restaurant logs in and sees only a **New order** form and their own
+  order history — no revenue, deposits, or other customers.
+- New orders appear in the admin **Orders** tab (with a pending badge). An
+  admin taps **Fulfil…**, which pre-fills the normal delivery form; saving it
+  records the delivery and marks the order **Delivered**.
+- A restaurant can **Cancel** an order while it is still Requested.
+
+Notifications (email/WhatsApp) are not built yet — admins see pending orders
+in-app. See the design spec for the deferred plan.
 
 ## Bottle sizes & pricing (defaults, editable in Settings)
 

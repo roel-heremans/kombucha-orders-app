@@ -26,6 +26,9 @@
     .hidden { display:none; }
     pre { white-space:pre-wrap; background:#f4f3ee; padding:12px; border-radius:8px; font-size:13px; overflow-x:auto; }
     .banner { background:#fff3cd; color:#7a5b00; padding:8px 16px; font-size:13px; text-align:center; }
+    .badge { display:inline-block; min-width:18px; padding:0 5px; border-radius:9px;
+      background:#c0392b; color:#fff; font-size:11px; line-height:18px; text-align:center; }
+    .badge.hidden { display:none; }
   </style>
 </head>
 <body>
@@ -50,6 +53,7 @@
     <nav>
       <button data-view="new" class="active">New</button>
       <button data-view="deliveries">Deliveries</button>
+      <button data-view="orders">Orders <span id="ordersBadge" class="badge hidden"></span></button>
       <button data-view="dashboard">Dashboard</button>
       <button data-view="recibo">Recibo</button>
       <button data-view="settings">Settings</button>
@@ -57,20 +61,30 @@
     <main>
       <div id="view-new" class="view"></div>
       <div id="view-deliveries" class="view hidden"></div>
+      <div id="view-orders" class="view hidden"></div>
       <div id="view-dashboard" class="view hidden"></div>
       <div id="view-recibo" class="view hidden"></div>
       <div id="view-settings" class="view hidden"></div>
     </main>
   </div>
 
+  <!-- Restaurant view (non-admin users) -->
+  <div id="restaurantView" class="hidden">
+    <header style="padding:12px 16px;border-bottom:1px solid var(--line)">
+      <strong id="restaurantTitle">Kombucha orders</strong>
+      <button class="link" id="restaurantLogout" style="float:right">Log out</button>
+    </header>
+    <main id="restaurantBody" style="padding:16px"></main>
+  </div>
+
   <script src="lib.js"></script>
   <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut }
+    import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword }
       from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+    import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
     import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager }
       from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-    import { collection, doc, onSnapshot, addDoc, setDoc, updateDoc, deleteDoc, getDoc }
+    import { collection, doc, onSnapshot, addDoc, setDoc, updateDoc, deleteDoc, getDoc, query, where, serverTimestamp }
       from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
     // Replace with your Firebase web app config (see docs/FIREBASE_SETUP.md)
@@ -83,6 +97,8 @@
       appId: "1:260178477505:web:cc670a3534ca6469f9ef40",
     };
 
+    const ADMIN_EMAILS = ["roel.heremans@gmail.com", "reissnina@gmail.com"];
+
     const app = initializeApp(FIREBASE_CONFIG);
     const auth = getAuth(app);
     const db = initializeFirestore(app, {
@@ -90,7 +106,7 @@
     });
 
     // Expose to later-task code via a single namespace.
-    window.APP = { app, auth, db, state: { customers: [], flavours: [], deliveries: [], settings: null }, current: {} };
+    window.APP = { app, auth, db, state: { customers: [], flavours: [], deliveries: [], orders: [], settings: null }, current: {} };
     window.APP.esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
 
     // Online/offline banner
@@ -112,15 +128,28 @@
 
     window.APP.logout = () => signOut(auth);
 
+    const restaurantView = document.getElementById("restaurantView");
+    document.getElementById("restaurantLogout").addEventListener("click", () => signOut(auth));
+
     onAuthStateChanged(auth, (user) => {
-      if (user) {
-        window.APP.user = user;
-        loginView.classList.add("hidden");
-        appView.classList.remove("hidden");
-        if (window.APP.onLogin) window.APP.onLogin(); // data layer subscribes (Task 9)
-      } else {
+      if (!user) {
         loginView.classList.remove("hidden");
         appView.classList.add("hidden");
+        restaurantView.classList.add("hidden");
+        return;
+      }
+      window.APP.user = user;
+      loginView.classList.add("hidden");
+      if (ADMIN_EMAILS.includes(user.email)) {
+        window.APP.role = "admin";
+        restaurantView.classList.add("hidden");
+        appView.classList.remove("hidden");
+        if (window.APP.onLogin) window.APP.onLogin();
+      } else {
+        window.APP.role = "restaurant";
+        appView.classList.add("hidden");
+        restaurantView.classList.remove("hidden");
+        if (window.APP.onRestaurantLogin) window.APP.onRestaurantLogin(user.uid);
       }
     });
 
@@ -139,6 +168,7 @@
     window.APP.renderers = {};
 
     window.APP.render = function () {
+      if (window.APP.updateOrdersBadge) window.APP.updateOrdersBadge();
       const active = document.querySelector("nav button.active");
       const view = active ? active.dataset.view : "new";
       if (window.APP.renderers[view]) window.APP.renderers[view]();
@@ -178,8 +208,34 @@
       watch("customers", S.customers);
       watch("flavours", S.flavours);
       watch("deliveries", S.deliveries);
+      watch("orders", S.orders);
       window.APP.render();
     };
+
+    window.APP.onRestaurantLogin = function (uid) {
+      // Reference data (rules allow any signed-in user to read these).
+      const settingsRef = doc(db, "settings", "app");
+      onSnapshot(settingsRef, (d) => { S.settings = d.exists() ? d.data() : DEFAULT_SETTINGS; window.APP.renderRestaurant(); });
+      onSnapshot(collection(db, "flavours"), (snap) => {
+        S.flavours.length = 0;
+        snap.forEach((d) => S.flavours.push(Object.assign({ id: d.id }, d.data())));
+        window.APP.renderRestaurant();
+      });
+      // Own customer doc (matched by uid).
+      onSnapshot(query(collection(db, "customers"), where("uid", "==", uid)), (snap) => {
+        const list = [];
+        snap.forEach((d) => list.push(Object.assign({ id: d.id }, d.data())));
+        window.APP.myCustomer = list[0] || null;
+        window.APP.renderRestaurant();
+      });
+      // Own orders.
+      onSnapshot(query(collection(db, "orders"), where("customerUid", "==", uid)), (snap) => {
+        S.orders.length = 0;
+        snap.forEach((d) => S.orders.push(Object.assign({ id: d.id }, d.data())));
+        window.APP.renderRestaurant();
+      });
+    };
+    window.APP.renderRestaurant = function () {}; // replaced in Task 6
 
     // CRUD
     window.APP.addDelivery = (o) => addDoc(collection(db, "deliveries"), o);
@@ -191,6 +247,25 @@
     window.APP.addFlavour = (name) => addDoc(collection(db, "flavours"), { name });
     window.APP.deleteFlavour = (id) => deleteDoc(doc(db, "flavours", id));
     window.APP.saveSettings = (o) => setDoc(doc(db, "settings", "app"), o);
+    window.APP.addOrder = (o) => addDoc(collection(db, "orders"), o);
+    window.APP.cancelOrder = (id) => updateDoc(doc(db, "orders", id), { status: "cancelled" });
+    window.APP.setOrderDelivered = (id, deliveryId) => updateDoc(doc(db, "orders", id), { status: "delivered", deliveryId });
+    window.APP.serverTimestamp = serverTimestamp;
+
+    window.APP.createRestaurantLogin = async function (customerId, email, password) {
+      const name = "rlogin-" + customerId;
+      let secondary;
+      try { secondary = initializeApp(FIREBASE_CONFIG, name); }
+      catch (e) { secondary = initializeApp(FIREBASE_CONFIG, name + "-2"); }
+      try {
+        const secAuth = getAuth(secondary);
+        const cred = await createUserWithEmailAndPassword(secAuth, email, password);
+        await updateDoc(doc(db, "customers", customerId), { uid: cred.user.uid, email });
+        await signOut(secAuth);
+      } finally {
+        if (secondary) await deleteApp(secondary);
+      }
+    };
   </script>
 
   <script>
@@ -198,6 +273,7 @@
     const A = window.APP, KO = window.KO;
     const container = document.getElementById("view-new");
     let editing = null; // delivery id being edited, or null
+    let fulfilling = null; // order id being fulfilled, or null
     let built = false;  // whether the form shell is currently built
 
     function sizeOptions(selected) {
@@ -298,7 +374,8 @@
     function buildForm() {
       container.innerHTML =
         `<div class="card">` +
-        `<h3>${editing ? "Edit" : "New"} delivery</h3>` +
+        `<h3>${editing ? "Edit" : fulfilling ? "Fulfil order" : "New"} delivery</h3>` +
+        (fulfilling && !editing ? `<p class="muted">Fulfilling a requested order — saving will mark it delivered.</p>` : "") +
         `<label>Customer</label><select id="cust">${customerOptionsHtml("")}</select>` +
         `<label>Date</label><input id="date" type="date" value="${todayStr()}"/>` +
         `<h4>Bottles delivered</h4><div id="items"></div>` +
@@ -308,7 +385,7 @@
         `<p><strong>Subtotal: €<span id="subtotal">0.00</span></strong></p>` +
         `<p id="formErr" class="muted"></p>` +
         `<button class="primary" id="save">${editing ? "Update" : "Save"} delivery</button>` +
-        (editing ? `<button class="link" id="cancelEdit">Cancel edit</button>` : "") +
+        ((editing || fulfilling) ? `<button class="link" id="cancelEdit">${editing ? "Cancel edit" : "Cancel fulfilment"}</button>` : "") +
         `</div>`;
 
       const itemsDiv = container.querySelector("#items");
@@ -323,7 +400,7 @@
       });
       container.querySelector("#addItem").addEventListener("click", (e) => { e.preventDefault(); itemsDiv.appendChild(itemRow()); });
       container.querySelector("#save").addEventListener("click", onSave);
-      if (editing) container.querySelector("#cancelEdit").addEventListener("click", (e) => { e.preventDefault(); editing = null; built = false; renderNew(); });
+      if (editing || fulfilling) container.querySelector("#cancelEdit").addEventListener("click", (e) => { e.preventDefault(); editing = null; fulfilling = null; built = false; renderNew(); });
       built = true;
       updateSubtotal();
     }
@@ -343,7 +420,13 @@
       if (d.items.length === 0) { err.textContent = "Add at least one bottle line."; return; }
       try {
         if (editing) { await A.updateDelivery(editing, d); editing = null; }
-        else { d.enteredBy = A.user ? A.user.email : ""; await A.addDelivery(d); }
+        else {
+          d.enteredBy = A.user ? A.user.email : "";
+          const ref = await A.addDelivery(d);
+          const orderId = fulfilling;
+          fulfilling = null;
+          if (orderId) await A.setOrderDelivered(orderId, ref.id);
+        }
         built = false;
         renderNew();
         container.querySelector("#formErr").textContent = "Saved ✓";
@@ -354,6 +437,7 @@
       const d = A.state.deliveries.find((x) => x.id === id);
       if (!d) return;
       editing = id;
+      fulfilling = null;
       built = false;
       renderNew();
       container.querySelector("#cust").value = d.customerId;
@@ -367,6 +451,24 @@
         if (inp) inp.value = emp.quantity;
       });
       container.querySelector("#note").value = d.note || "";
+      updateSubtotal();
+      document.querySelector('nav button[data-view="new"]').click();
+    };
+
+    A.fulfilOrder = function (orderId) {
+      const o = A.state.orders.find((x) => x.id === orderId);
+      if (!o) return;
+      editing = null;
+      fulfilling = orderId;
+      built = false;
+      renderNew();
+      container.querySelector("#cust").value = o.customerId;
+      if (o.preferredDate) container.querySelector("#date").value = o.preferredDate;
+      const itemsDiv = container.querySelector("#items");
+      itemsDiv.innerHTML = "";
+      (o.items || []).forEach((it) => itemsDiv.appendChild(itemRow(it)));
+      if ((o.items || []).length === 0) itemsDiv.appendChild(itemRow());
+      container.querySelector("#note").value = o.note || "";
       updateSubtotal();
       document.querySelector('nav button[data-view="new"]').click();
     };
@@ -418,6 +520,60 @@
     }
 
     A.renderers.deliveries = render;
+  });
+  </script>
+
+  <script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const A = window.APP, KO = window.KO;
+    const container = document.getElementById("view-orders");
+    const badge = document.getElementById("ordersBadge");
+
+    function sortedOrders() {
+      const rank = { requested: 0, delivered: 1, cancelled: 2 };
+      return A.state.orders.slice().sort(function (a, b) {
+        const r = (rank[a.status] || 0) - (rank[b.status] || 0);
+        if (r !== 0) return r;
+        const ta = (a.createdAt && a.createdAt.seconds) || 0;
+        const tb = (b.createdAt && b.createdAt.seconds) || 0;
+        return tb - ta;
+      });
+    }
+
+    function updateBadge() {
+      const n = A.state.orders.filter((o) => o.status === "requested").length;
+      badge.textContent = n;
+      badge.classList.toggle("hidden", n === 0);
+    }
+
+    function render() {
+      updateBadge();
+      const sizes = A.state.settings ? A.state.settings.sizes : [];
+      const orders = sortedOrders();
+      if (orders.length === 0) { container.innerHTML = "<p class='muted'>No orders yet.</p>"; return; }
+      container.innerHTML = orders.map(function (o) {
+        const summary = KO.orderItemsSummary(o, sizes, A.flavourName);
+        const status = KO.orderStatusLabel(o.status);
+        const when = o.preferredDate ? `<div class="muted">Preferred: ${A.esc(o.preferredDate)}</div>` : "";
+        const note = o.note ? `<div class="muted">Note: ${A.esc(o.note)}</div>` : "";
+        const actions = o.status === "requested"
+          ? `<div class="row"><button class="primary" data-fulfil="${o.id}">Fulfil…</button>` +
+            `<button class="link" data-cancel="${o.id}">Cancel</button></div>`
+          : "";
+        return `<div class="card"><strong>${A.esc(A.customerName(o.customerId))}</strong> — ${status}` +
+          `<div>${A.esc(summary)}</div>${when}${note}${actions}</div>`;
+      }).join("");
+
+      container.querySelectorAll("[data-fulfil]").forEach((b) =>
+        b.addEventListener("click", () => A.fulfilOrder(b.dataset.fulfil)));
+      container.querySelectorAll("[data-cancel]").forEach((b) =>
+        b.addEventListener("click", async () => {
+          if (confirm("Cancel this order?")) await A.cancelOrder(b.dataset.cancel);
+        }));
+    }
+
+    A.renderers.orders = render;
+    A.updateOrdersBadge = updateBadge;
   });
   </script>
 
@@ -587,6 +743,16 @@
             `<div class="row"><div>${A.esc(f.name)}</div>` +
             `<button class="link" data-delflav="${f.id}" style="flex:0 0 60px">Delete</button></div>`).join("") +
           `</div>` +
+        `<div class="card"><h4>Restaurant logins</h4>` +
+          `<p class="muted">Create an app login so a restaurant can place their own orders.</p>` +
+          `<label>Customer</label><select id="rlCust">` +
+            A.state.customers.slice().sort((a,b)=>a.name.localeCompare(b.name)).map((c) =>
+              `<option value="${c.id}">${A.esc(c.name)}${c.uid ? " ✓ has login" : ""}</option>`).join("") +
+          `</select>` +
+          `<label>Login email</label><input id="rlEmail" type="email"/>` +
+          `<label>Initial password</label><input id="rlPw" type="text" value=""/>` +
+          `<button class="primary" id="rlCreate">Create login</button>` +
+          `<p id="rlMsg" class="muted"></p></div>` +
         `<div class="card"><h4>Backup</h4>` +
           `<button class="link" id="exportBtn">Export all data (JSON)</button></div>`;
 
@@ -633,6 +799,7 @@
           version: 1, exportedAt: new Date().toISOString(),
           settings: A.state.settings, customers: A.state.customers,
           flavours: A.state.flavours, deliveries: A.state.deliveries,
+          orders: A.state.orders,
         };
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
         const url = URL.createObjectURL(blob);
@@ -640,9 +807,143 @@
         a.href = url; a.download = "kombucha-backup.json"; a.click();
         URL.revokeObjectURL(url);
       });
+
+      const rlCreate = container.querySelector("#rlCreate");
+      if (rlCreate) rlCreate.addEventListener("click", async () => {
+        const msg = container.querySelector("#rlMsg");
+        const customerId = container.querySelector("#rlCust").value;
+        const email = container.querySelector("#rlEmail").value.trim();
+        const pw = container.querySelector("#rlPw").value;
+        if (!customerId || !email || pw.length < 6) { msg.textContent = "Choose a customer, email, and a password of 6+ chars."; return; }
+        rlCreate.disabled = true; msg.textContent = "Creating…";
+        try {
+          await A.createRestaurantLogin(customerId, email, pw);
+          const okMsg = container.querySelector("#rlMsg");
+          if (okMsg) okMsg.textContent = "Login created ✓ — give the restaurant this email + password.";
+        } catch (ex) {
+          const failMsg = container.querySelector("#rlMsg");
+          if (failMsg) failMsg.textContent = "Failed: " + (ex.code || ex.message);
+        }
+        finally { rlCreate.disabled = false; }
+      });
     }
 
     A.renderers.settings = render;
+  });
+  </script>
+
+  <script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const A = window.APP, KO = window.KO;
+    const body = document.getElementById("restaurantBody");
+    const title = document.getElementById("restaurantTitle");
+
+    function sizeOptions() {
+      return (A.state.settings ? A.state.settings.sizes : [])
+        .map((s) => `<option value="${s.id}">${A.esc(s.label)}</option>`).join("");
+    }
+    function flavourOptions() {
+      return `<option value="">— choose flavour —</option>` +
+        A.state.flavours.slice().sort((a, b) => a.name.localeCompare(b.name))
+          .map((f) => `<option value="${f.id}">${A.esc(f.name)}</option>`).join("");
+    }
+    function itemRowHtml() {
+      return `<div class="row order-item">` +
+        `<div><label>Size</label><select class="oi-size">${sizeOptions()}</select></div>` +
+        `<div><label>Flavour</label><select class="oi-flav">${flavourOptions()}</select></div>` +
+        `<div style="flex:0 0 64px"><label>Qty</label><input class="oi-qty" type="number" min="1" value="1"/></div>` +
+        `<button class="link oi-del" style="flex:0 0 32px">✕</button></div>`;
+    }
+
+    function myOrders() {
+      const uid = A.user ? A.user.uid : null;
+      return A.state.orders.filter((o) => o.customerUid === uid).slice().sort((a, b) => {
+        const ta = (a.createdAt && a.createdAt.seconds) || 0;
+        const tb = (b.createdAt && b.createdAt.seconds) || 0;
+        return tb - ta;
+      });
+    }
+
+    function render() {
+      if (A.role !== "restaurant") return;
+      if (!A.state.settings) { body.innerHTML = "<p class='muted'>Loading…</p>"; return; }
+      if (!A.myCustomer) {
+        body.innerHTML = "<div class='card'><p>Your account isn't linked to a customer yet. Please contact us.</p></div>";
+        return;
+      }
+      title.textContent = A.myCustomer.name;
+      const sizes = A.state.settings.sizes;
+      const orders = myOrders();
+      body.innerHTML =
+        `<div class="card"><h3>New order</h3>` +
+          `<div id="orderItems">${itemRowHtml()}</div>` +
+          `<button class="link" id="addOrderLine">➕ Add line</button>` +
+          `<label>Preferred date (optional)</label><input id="orderDate" type="date"/>` +
+          `<label>Note (optional)</label><textarea id="orderNote" rows="2"></textarea>` +
+          `<p id="orderErr" class="muted"></p>` +
+          `<button class="primary" id="sendOrder">Send order</button></div>` +
+        `<div class="card"><h3>Your orders</h3>` +
+          (orders.length === 0 ? "<p class='muted'>No orders yet.</p>" :
+            orders.map((o) => {
+              const cancel = o.status === "requested"
+                ? ` <button class="link" data-cancelmine="${o.id}">Cancel</button>` : "";
+              return `<div class="row" style="justify-content:space-between">` +
+                `<div><div>${A.esc(KO.orderItemsSummary(o, sizes, A.flavourName))}</div>` +
+                `<div class="muted">${KO.orderStatusLabel(o.status)}${o.preferredDate ? " · " + A.esc(o.preferredDate) : ""}</div></div>` +
+                `<div>${cancel}</div></div>`;
+            }).join("")) +
+        `</div>`;
+
+      const itemsDiv = body.querySelector("#orderItems");
+      body.querySelector("#addOrderLine").addEventListener("click", (e) => {
+        e.preventDefault();
+        const tmp = document.createElement("div");
+        tmp.innerHTML = itemRowHtml();
+        itemsDiv.appendChild(tmp.firstElementChild);
+      });
+      itemsDiv.addEventListener("click", (e) => {
+        if (e.target.classList.contains("oi-del")) { e.preventDefault(); e.target.closest(".order-item").remove(); }
+      });
+      body.querySelector("#sendOrder").addEventListener("click", onSend);
+      body.querySelectorAll("[data-cancelmine]").forEach((b) =>
+        b.addEventListener("click", async () => {
+          if (confirm("Cancel this order?")) await A.cancelOrder(b.dataset.cancelmine);
+        }));
+    }
+
+    async function onSend() {
+      const err = body.querySelector("#orderErr");
+      const btn = body.querySelector("#sendOrder");
+      const items = [];
+      body.querySelectorAll(".order-item").forEach((r) => {
+        const sizeId = r.querySelector(".oi-size").value;
+        const flavourId = r.querySelector(".oi-flav").value;
+        const quantity = parseInt(r.querySelector(".oi-qty").value, 10) || 0;
+        if (sizeId && flavourId && quantity > 0) items.push({ sizeId, flavourId, quantity });
+      });
+      if (items.length === 0) { err.textContent = "Add at least one bottle line with a flavour."; return; }
+      if (btn) btn.disabled = true;
+      try {
+        await A.addOrder({
+          customerId: A.myCustomer.id,
+          customerUid: A.user.uid,
+          items,
+          preferredDate: body.querySelector("#orderDate").value || "",
+          note: body.querySelector("#orderNote").value.trim(),
+          status: "requested",
+          createdAt: A.serverTimestamp(),
+        });
+        const msg = document.getElementById("orderErr");
+        if (msg) msg.textContent = "Order sent ✓";
+      } catch (ex) {
+        const msg = document.getElementById("orderErr");
+        if (msg) msg.textContent = "Send failed: " + ex.message;
+        const b2 = document.getElementById("sendOrder");
+        if (b2) b2.disabled = false;
+      }
+    }
+
+    A.renderRestaurant = render;
   });
   </script>
 </body>

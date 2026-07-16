@@ -1,15 +1,50 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function allowed() {
+    function isAdmin() {
       return request.auth != null &&
         request.auth.token.email in [
           "roel.heremans@gmail.com",
           "reissnina@gmail.com"
         ];
     }
-    match /{document=**} {
-      allow read, write: if allowed();
+    function signedIn() { return request.auth != null; }
+
+    // Reference data the restaurant order form needs to render.
+    match /flavours/{id} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+    match /settings/{id} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    // Customers: admin full; a restaurant may read only its own linked doc.
+    match /customers/{id} {
+      allow read: if isAdmin() ||
+        (signedIn() && resource.data.uid == request.auth.uid);
+      allow write: if isAdmin();
+    }
+
+    // Deliveries and everything revenue-related: admin only.
+    match /deliveries/{id} {
+      allow read, write: if isAdmin();
+    }
+
+    // Orders: admin full; restaurant may create + read + cancel ONLY its own.
+    match /orders/{id} {
+      allow read: if isAdmin() ||
+        (signedIn() && resource.data.customerUid == request.auth.uid);
+      allow create: if isAdmin() ||
+        (signedIn() && request.resource.data.customerUid == request.auth.uid
+                    && request.resource.data.status == "requested");
+      allow update: if isAdmin() ||
+        (signedIn() && resource.data.customerUid == request.auth.uid
+                    && resource.data.status == "requested"
+                    && request.resource.data.status == "cancelled"
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["status"]));
+      allow delete: if isAdmin();
     }
   }
 }

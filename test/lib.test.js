@@ -212,3 +212,30 @@ test("generateRecibo omits the NIF line when nif is empty/missing", () => {
   assert.ok(!emptyArg.includes("NIF:"));
   assert.ok(noArg.startsWith("OUT - Kombucha Produto\n\n"));
 });
+
+test("orderItemsSummary joins items with size label and flavour name", () => {
+  const order = { items: [
+    { sizeId: "1L", flavourId: "gin", quantity: 8 },
+    { sizeId: "270ml", flavourId: "hib", quantity: 6 },
+  ] };
+  const names = { gin: "Ginger", hib: "Hibiscus" };
+  const out = KO.orderItemsSummary(order, SIZES, (id) => names[id] || id);
+  assert.strictEqual(out, "8x 1 L Ginger, 6x 270 ml Hibiscus");
+});
+
+test("orderItemsSummary falls back to raw ids when size/flavour unknown", () => {
+  const order = { items: [{ sizeId: "500ml", flavourId: "xyz", quantity: 2 }] };
+  assert.strictEqual(KO.orderItemsSummary(order, SIZES), "2x 500ml xyz");
+});
+
+test("orderItemsSummary returns empty string for no items", () => {
+  assert.strictEqual(KO.orderItemsSummary({}, SIZES), "");
+  assert.strictEqual(KO.orderItemsSummary({ items: [] }, SIZES), "");
+});
+
+test("orderStatusLabel maps statuses", () => {
+  assert.strictEqual(KO.orderStatusLabel("requested"), "⏳ Requested");
+  assert.strictEqual(KO.orderStatusLabel("delivered"), "✅ Delivered");
+  assert.strictEqual(KO.orderStatusLabel("cancelled"), "✖ Cancelled");
+  assert.strictEqual(KO.orderStatusLabel("weird"), "⏳ Requested");
+});

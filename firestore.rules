@@ -46,5 +46,16 @@ service cloud.firestore {
                     && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["status"]));
       allow delete: if isAdmin();
     }
+
+    match /recibos/{id} {
+      allow read: if isAdmin() ||
+        (signedIn() && resource.data.customerUid == request.auth.uid);
+      allow write: if isAdmin();
+    }
+    match /reciboFiles/{id} {
+      allow read: if isAdmin() ||
+        (signedIn() && resource.data.customerUid == request.auth.uid);
+      allow write: if isAdmin();
+    }
   }
 }

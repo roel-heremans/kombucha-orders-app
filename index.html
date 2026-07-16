@@ -649,8 +649,8 @@
         typeBars(yearly, (r) => ({ label: r.year, tipLabel: r.year })),
         {});
       const custChart = KO.barChartSVG(
-        byCust.map((c) => ({ label: A.customerName(c.customerId).slice(0, 6), title: A.customerName(c.customerId), value: c.amount })),
-        { format: euro });
+        byCust.map((c) => ({ label: A.customerName(c.customerId).slice(0, 10), title: A.customerName(c.customerId), value: c.amount })),
+        { format: euro, rotate: true });
       const typeLegend = legendHtml([
         { label: "Private", color: TYPE_COLORS.private },
         { label: "Restaurant", color: TYPE_COLORS.restaurant },

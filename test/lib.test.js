@@ -177,6 +177,15 @@ test("barChartSVG title uses opts.format and an optional full title", () => {
   assert.ok(svg.includes(">Pal</text>")); // axis label stays short
 });
 
+test("barChartSVG rotate option rotates x labels 90deg clockwise", () => {
+  const plain = KO.barChartSVG([{ label: "A", value: 5 }]);
+  assert.doesNotMatch(plain, /rotate\(90/); // default: no rotation
+  const svg = KO.barChartSVG([{ label: "Sun Spot Cafe", value: 5 }], { rotate: true });
+  assert.match(svg, /transform="rotate\(90 /);       // labels rotated clockwise
+  assert.match(svg, /text-anchor="start"/);          // hang downward from the axis
+  assert.ok(svg.includes(">Sun Spot Cafe</text>"));  // label text preserved (caller truncates)
+});
+
 test("revenueByCustomerType groups by customer type, default restaurant", () => {
   const customers = [
     { id: "A", name: "Palm Spot", type: "restaurant" },

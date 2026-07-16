@@ -291,11 +291,14 @@
   function barChartSVG(data, opts) {
     opts = opts || {};
     const width = opts.width || 320;
-    const height = opts.height || 160;
+    const rotate = !!opts.rotate; // rotate x labels 90deg clockwise (long labels)
+    const height = opts.height || (rotate ? 210 : 160);
     const color = opts.color || "#4a7c59";
     const fmt = opts.format || function (v) { return String(v); };
-    const pad = 24;
-    const chartH = height - pad * 2;
+    const pad = 24;                       // horizontal margins + top
+    const bottomPad = rotate ? 70 : 24;   // room for x-axis labels
+    const chartH = height - pad - bottomPad;
+    const baseline = pad + chartH;
     const max = data.reduce(function (m, d) { return Math.max(m, d.value); }, 0) || 1;
     const n = data.length;
     const slot = n > 0 ? (width - pad * 2) / n : 0;
@@ -304,15 +307,23 @@
     data.forEach(function (d, i) {
       const h = (d.value / max) * chartH;
       const x = pad + slot * i + (slot - barW) / 2;
-      const y = pad + (chartH - h);
+      const y = baseline - h;
+      const cx = x + barW / 2;
       const titleText = (d.title != null ? d.title : d.label) + ": " + fmt(d.value);
       bars += '<rect class="bar" data-tip="' + escapeXml(titleText) +
         '" style="cursor:pointer" x="' + x.toFixed(1) + '" y="' + y.toFixed(1) +
         '" width="' + barW.toFixed(1) + '" height="' + h.toFixed(1) +
         '" fill="' + color + '"><title>' + escapeXml(titleText) + "</title></rect>";
-      bars += '<text x="' + (x + barW / 2).toFixed(1) + '" y="' + (height - 6) +
-        '" font-size="9" text-anchor="middle" fill="currentColor">' +
-        escapeXml(d.label) + "</text>";
+      if (rotate) {
+        const ly = (baseline + 5).toFixed(1);
+        bars += '<text x="' + cx.toFixed(1) + '" y="' + ly +
+          '" font-size="9" text-anchor="start" fill="currentColor" transform="rotate(90 ' +
+          cx.toFixed(1) + " " + ly + ')">' + escapeXml(d.label) + "</text>";
+      } else {
+        bars += '<text x="' + cx.toFixed(1) + '" y="' + (height - 6) +
+          '" font-size="9" text-anchor="middle" fill="currentColor">' +
+          escapeXml(d.label) + "</text>";
+      }
     });
     return '<svg viewBox="0 0 ' + width + " " + height +
       '" width="100%" role="img">' + bars + "</svg>";

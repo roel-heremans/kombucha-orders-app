@@ -86,7 +86,7 @@
     import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
     import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager }
       from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-    import { collection, doc, onSnapshot, addDoc, setDoc, updateDoc, deleteDoc, getDoc, query, where, serverTimestamp }
+    import { collection, doc, onSnapshot, addDoc, setDoc, updateDoc, deleteDoc, getDoc, query, where, serverTimestamp, writeBatch }
       from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
     // Replace with your Firebase web app config (see docs/FIREBASE_SETUP.md)
@@ -108,7 +108,7 @@
     });
 
     // Expose to later-task code via a single namespace.
-    window.APP = { app, auth, db, state: { customers: [], flavours: [], deliveries: [], orders: [], settings: null }, current: {} };
+    window.APP = { app, auth, db, state: { customers: [], flavours: [], deliveries: [], orders: [], recibos: [], settings: null }, current: {} };
     window.APP.esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
 
     // Online/offline banner
@@ -211,6 +211,7 @@
       watch("flavours", S.flavours);
       watch("deliveries", S.deliveries);
       watch("orders", S.orders);
+      watch("recibos", S.recibos);
       window.APP.render();
     };
 
@@ -236,6 +237,12 @@
         snap.forEach((d) => S.orders.push(Object.assign({ id: d.id }, d.data())));
         window.APP.renderRestaurant();
       });
+      // Own recibos (metadata only; file bytes fetched on demand).
+      onSnapshot(query(collection(db, "recibos"), where("customerUid", "==", uid)), (snap) => {
+        S.recibos.length = 0;
+        snap.forEach((d) => S.recibos.push(Object.assign({ id: d.id }, d.data())));
+        window.APP.renderRestaurant();
+      });
     };
     window.APP.renderRestaurant = function () {}; // replaced in Task 6
 
@@ -252,6 +259,23 @@
     window.APP.addOrder = (o) => addDoc(collection(db, "orders"), o);
     window.APP.cancelOrder = (id) => updateDoc(doc(db, "orders", id), { status: "cancelled" });
     window.APP.setOrderDelivered = (id, deliveryId) => updateDoc(doc(db, "orders", id), { status: "delivered", deliveryId });
+    window.APP.uploadRecibo = function (customerId, customerUid, monthKey, fileName, size, base64, uploadedBy) {
+      const id = KO.reciboDocId(customerId, monthKey);
+      const batch = writeBatch(db);
+      batch.set(doc(db, "recibos", id), {
+        customerId, customerUid, monthKey, fileName, size,
+        uploadedAt: serverTimestamp(), uploadedBy: uploadedBy || "",
+      });
+      batch.set(doc(db, "reciboFiles", id), { customerUid, data: base64, contentType: "application/pdf" });
+      return batch.commit();
+    };
+    window.APP.deleteRecibo = function (id) {
+      const batch = writeBatch(db);
+      batch.delete(doc(db, "recibos", id));
+      batch.delete(doc(db, "reciboFiles", id));
+      return batch.commit();
+    };
+    window.APP.fetchReciboFile = function (id) { return getDoc(doc(db, "reciboFiles", id)); };
     window.APP.serverTimestamp = serverTimestamp;
 
     window.APP.createRestaurantLogin = async function (customerId, email, password) {

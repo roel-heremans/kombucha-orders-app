@@ -1002,6 +1002,19 @@
     const title = document.getElementById("restaurantTitle");
     let showCleared = false; // session-only: reveal locally-hidden finished orders
 
+    function base64ToBlob(b64, type) {
+      const bin = atob(b64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return new Blob([bytes], { type: type || "application/pdf" });
+    }
+
+    function myRecibos() {
+      const uid = A.user ? A.user.uid : null;
+      return A.state.recibos.filter((r) => r.customerUid === uid)
+        .slice().sort((a, b) => (a.monthKey < b.monthKey ? 1 : -1));
+    }
+
     // "Cleared" finished orders are hidden from this device only (localStorage);
     // nothing is deleted and admins still see every order.
     function hiddenKey() { return "ko_hidden_orders_" + (A.user ? A.user.uid : ""); }
@@ -1082,7 +1095,15 @@
           `</div>` +
           ordersBody +
           (hiddenCount ? `<p class="muted" style="margin-top:8px"><button class="link" id="toggleCleared">${showCleared ? "Hide cleared orders" : "Show cleared orders (" + hiddenCount + ")"}</button></p>` : "") +
-        `</div>`;
+        `</div>` +
+        `<div class="card"><h3>My Recibos</h3>` +
+          (myRecibos().length
+            ? myRecibos().map((r) =>
+                `<div class="row" style="justify-content:space-between">` +
+                `<div>${A.esc(KO.windowLabel(r.monthKey, r.monthKey))}<div class="muted">${A.esc(r.fileName)}</div></div>` +
+                `<button class="link" data-getrec="${r.id}">Download / Print</button></div>`).join("")
+            : "<p class='muted'>No recibos yet.</p>") +
+          `<p id="recMsg" class="muted"></p></div>`;
 
       const itemsDiv = body.querySelector("#orderItems");
       body.querySelector("#addOrderLine").addEventListener("click", (e) => {
@@ -1111,6 +1132,23 @@
       });
       const toggleBtn = body.querySelector("#toggleCleared");
       if (toggleBtn) toggleBtn.addEventListener("click", () => { showCleared = !showCleared; render(); });
+
+      body.querySelectorAll("[data-getrec]").forEach((b) =>
+        b.addEventListener("click", async () => {
+          const win = window.open("", "_blank"); // opened within the user gesture (avoids popup block)
+          const setMsg = (t) => { const m = body.querySelector("#recMsg"); if (m) m.textContent = t; };
+          try {
+            const snap = await A.fetchReciboFile(b.dataset.getrec);
+            if (!snap.exists()) { if (win) win.close(); setMsg("That recibo is no longer available."); return; }
+            const d = snap.data();
+            const url = URL.createObjectURL(base64ToBlob(d.data, d.contentType));
+            if (win) win.location.href = url; else window.location.href = url;
+            setTimeout(() => URL.revokeObjectURL(url), 60000);
+          } catch (ex) {
+            if (win) win.close();
+            setMsg("Could not open the recibo: " + (ex.code || ex.message));
+          }
+        }));
     }
 
     async function onSend() {

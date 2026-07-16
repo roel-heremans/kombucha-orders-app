@@ -251,6 +251,21 @@
     window.APP.cancelOrder = (id) => updateDoc(doc(db, "orders", id), { status: "cancelled" });
     window.APP.setOrderDelivered = (id, deliveryId) => updateDoc(doc(db, "orders", id), { status: "delivered", deliveryId });
     window.APP.serverTimestamp = serverTimestamp;
+
+    window.APP.createRestaurantLogin = async function (customerId, email, password) {
+      const name = "rlogin-" + customerId;
+      let secondary;
+      try { secondary = initializeApp(FIREBASE_CONFIG, name); }
+      catch (e) { secondary = initializeApp(FIREBASE_CONFIG, name + "-2"); }
+      try {
+        const secAuth = getAuth(secondary);
+        const cred = await createUserWithEmailAndPassword(secAuth, email, password);
+        await updateDoc(doc(db, "customers", customerId), { uid: cred.user.uid, email });
+        await signOut(secAuth);
+      } finally {
+        if (secondary) await deleteApp(secondary);
+      }
+    };
   </script>
 
   <script>
@@ -727,6 +742,16 @@
             `<div class="row"><div>${A.esc(f.name)}</div>` +
             `<button class="link" data-delflav="${f.id}" style="flex:0 0 60px">Delete</button></div>`).join("") +
           `</div>` +
+        `<div class="card"><h4>Restaurant logins</h4>` +
+          `<p class="muted">Create an app login so a restaurant can place their own orders.</p>` +
+          `<label>Customer</label><select id="rlCust">` +
+            A.state.customers.slice().sort((a,b)=>a.name.localeCompare(b.name)).map((c) =>
+              `<option value="${c.id}">${A.esc(c.name)}${c.uid ? " ✓ has login" : ""}</option>`).join("") +
+          `</select>` +
+          `<label>Login email</label><input id="rlEmail" type="email"/>` +
+          `<label>Initial password</label><input id="rlPw" type="text" value=""/>` +
+          `<button class="primary" id="rlCreate">Create login</button>` +
+          `<p id="rlMsg" class="muted"></p></div>` +
         `<div class="card"><h4>Backup</h4>` +
           `<button class="link" id="exportBtn">Export all data (JSON)</button></div>`;
 
@@ -779,6 +804,21 @@
         const a = document.createElement("a");
         a.href = url; a.download = "kombucha-backup.json"; a.click();
         URL.revokeObjectURL(url);
+      });
+
+      const rlCreate = container.querySelector("#rlCreate");
+      if (rlCreate) rlCreate.addEventListener("click", async () => {
+        const msg = container.querySelector("#rlMsg");
+        const customerId = container.querySelector("#rlCust").value;
+        const email = container.querySelector("#rlEmail").value.trim();
+        const pw = container.querySelector("#rlPw").value;
+        if (!customerId || !email || pw.length < 6) { msg.textContent = "Choose a customer, email, and a password of 6+ chars."; return; }
+        rlCreate.disabled = true; msg.textContent = "Creating…";
+        try {
+          await A.createRestaurantLogin(customerId, email, pw);
+          msg.textContent = "Login created ✓ — give the restaurant this email + password.";
+        } catch (ex) { msg.textContent = "Failed: " + (ex.code || ex.message); }
+        finally { rlCreate.disabled = false; }
       });
     }
 

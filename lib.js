@@ -51,6 +51,75 @@
     return keys;
   }
 
+  function resolveWindow(preset, startMk, endMk, curMk) {
+    if (preset === "last-month") { const p = recentMonthKeys(curMk, 2)[0]; return { startMk: p, endMk: p }; }
+    if (preset === "this-year") { return { startMk: curMk.slice(0, 4) + "-01", endMk: curMk }; }
+    if (preset === "custom") {
+      let s = startMk || curMk, e = endMk || curMk;
+      if (s > e) s = e;
+      return { startMk: s, endMk: e };
+    }
+    return { startMk: curMk, endMk: curMk }; // this-month (default)
+  }
+
+  // Callers pass startMk <= endMk (see resolveWindow); an inverted range returns [endMk].
+  function monthKeysBetween(startMk, endMk) {
+    if (startMk > endMk) return [endMk];
+    let y = parseInt(startMk.slice(0, 4), 10);
+    let m = parseInt(startMk.slice(5, 7), 10);
+    const ey = parseInt(endMk.slice(0, 4), 10);
+    const em = parseInt(endMk.slice(5, 7), 10);
+    const keys = [];
+    while (y < ey || (y === ey && m <= em)) {
+      keys.push(y + "-" + String(m).padStart(2, "0"));
+      m++; if (m === 13) { m = 1; y++; }
+    }
+    return keys;
+  }
+
+  function inWindow(dateStr, startMk, endMk) {
+    const mk = monthKey(dateStr);
+    return mk >= startMk && mk <= endMk;
+  }
+
+  function revenueInWindow(deliveries, sizes, startMk, endMk) {
+    return deliveries.reduce(function (sum, d) {
+      return inWindow(d.date, startMk, endMk) ? sum + deliveryRevenue(d, sizes) : sum;
+    }, 0);
+  }
+
+  function revenueByCustomerInWindow(deliveries, sizes, startMk, endMk) {
+    const byId = {};
+    deliveries.forEach(function (d) {
+      if (!inWindow(d.date, startMk, endMk)) return;
+      byId[d.customerId] = (byId[d.customerId] || 0) + deliveryRevenue(d, sizes);
+    });
+    return Object.keys(byId)
+      .map(function (id) { return { customerId: id, amount: byId[id] }; })
+      .sort(function (a, b) { return b.amount - a.amount; });
+  }
+
+  function flavourCountsInWindow(deliveries, startMk, endMk) {
+    const byId = {};
+    deliveries.forEach(function (d) {
+      if (!inWindow(d.date, startMk, endMk)) return;
+      (d.items || []).forEach(function (it) {
+        byId[it.flavourId] = (byId[it.flavourId] || 0) + it.quantity;
+      });
+    });
+    return Object.keys(byId)
+      .map(function (id) { return { flavourId: id, quantity: byId[id] }; })
+      .sort(function (a, b) { return b.quantity - a.quantity; });
+  }
+
+  function windowLabel(startMk, endMk) {
+    const abbr = function (mk) { return monthName(mk).slice(0, 3); };
+    const year = function (mk) { return mk.slice(0, 4); };
+    if (startMk === endMk) return abbr(startMk) + " " + year(startMk);
+    if (year(startMk) === year(endMk)) return abbr(startMk) + "–" + abbr(endMk) + " " + year(endMk);
+    return abbr(startMk) + " " + year(startMk) + "–" + abbr(endMk) + " " + year(endMk);
+  }
+
   function monthlyRevenue(deliveries, sizes, mk) {
     return deliveries.reduce(function (sum, d) {
       return inMonth(d.date, mk) ? sum + deliveryRevenue(d, sizes) : sum;
@@ -249,5 +318,79 @@
       '" width="100%" role="img">' + bars + "</svg>";
   }
 
-  return { formatMoney, sizeById, deliveryRevenue, deliveryDepositRefund, monthKey, inMonth, monthName, dayOfMonth, recentMonthKeys, monthlyRevenue, revenueByCustomer, monthlyRevenueSeries, flavourCounts, revenueByCustomerType, outstandingByCustomer, reciboSizeLabel, generateRecibo, orderItemsSummary, orderStatusLabel, barChartSVG };
+  function stackedBarChartSVG(bars, opts) {
+    opts = opts || {};
+    const width = opts.width || 320;
+    const height = opts.height || 160;
+    const pad = 24;
+    const chartH = height - pad * 2;
+    const sums = bars.map(function (b) {
+      return (b.segments || []).reduce(function (s, seg) { return s + seg.value; }, 0);
+    });
+    const max = sums.reduce(function (m, v) { return Math.max(m, v); }, 0) || 1;
+    const n = bars.length;
+    const slot = n > 0 ? (width - pad * 2) / n : 0;
+    const barW = slot * 0.6;
+    let out = "";
+    bars.forEach(function (b, i) {
+      const x = pad + slot * i + (slot - barW) / 2;
+      let yCursor = pad + chartH; // bottom baseline
+      const tip = escapeXml(b.tip || "");
+      (b.segments || []).forEach(function (seg) {
+        const h = (seg.value / max) * chartH;
+        const y = yCursor - h;
+        out += '<rect class="bar" data-tip="' + tip + '" style="cursor:pointer" x="' +
+          x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + barW.toFixed(1) +
+          '" height="' + Math.max(0, h).toFixed(1) + '" fill="' + seg.color +
+          '"><title>' + tip + "</title></rect>";
+        yCursor = y;
+      });
+      out += '<text x="' + (x + barW / 2).toFixed(1) + '" y="' + (height - 6) +
+        '" font-size="9" text-anchor="middle" fill="currentColor">' +
+        escapeXml(b.label) + "</text>";
+    });
+    return '<svg viewBox="0 0 ' + width + " " + height +
+      '" width="100%" role="img">' + out + "</svg>";
+  }
+
+  function typeMap(customers) {
+    const t = {};
+    (customers || []).forEach(function (c) { t[c.id] = c.type === "private" ? "private" : "restaurant"; });
+    return t;
+  }
+
+  function revenueByTypeInWindow(deliveries, sizes, customers, startMk, endMk) {
+    const t = typeMap(customers);
+    let priv = 0, rest = 0;
+    deliveries.forEach(function (d) {
+      if (!inWindow(d.date, startMk, endMk)) return;
+      const r = deliveryRevenue(d, sizes);
+      if ((t[d.customerId] || "restaurant") === "private") priv += r; else rest += r;
+    });
+    return { private: priv, restaurant: rest, total: priv + rest };
+  }
+
+  function revenueTypeSeries(deliveries, sizes, customers, monthKeys) {
+    return monthKeys.map(function (mk) {
+      const r = revenueByTypeInWindow(deliveries, sizes, customers, mk, mk);
+      return { monthKey: mk, private: r.private, restaurant: r.restaurant, total: r.total };
+    });
+  }
+
+  function revenueTypeByYear(deliveries, sizes, customers) {
+    const t = typeMap(customers);
+    const byYear = {};
+    deliveries.forEach(function (d) {
+      const y = d.date.slice(0, 4);
+      const e = byYear[y] || (byYear[y] = { private: 0, restaurant: 0 });
+      const r = deliveryRevenue(d, sizes);
+      if ((t[d.customerId] || "restaurant") === "private") e.private += r; else e.restaurant += r;
+    });
+    return Object.keys(byYear).sort().map(function (y) {
+      return { year: y, private: byYear[y].private, restaurant: byYear[y].restaurant,
+        total: byYear[y].private + byYear[y].restaurant };
+    });
+  }
+
+  return { formatMoney, sizeById, deliveryRevenue, deliveryDepositRefund, monthKey, inMonth, monthName, dayOfMonth, recentMonthKeys, resolveWindow, monthKeysBetween, inWindow, revenueInWindow, revenueByCustomerInWindow, flavourCountsInWindow, windowLabel, monthlyRevenue, revenueByCustomer, monthlyRevenueSeries, flavourCounts, revenueByCustomerType, outstandingByCustomer, reciboSizeLabel, generateRecibo, orderItemsSummary, orderStatusLabel, barChartSVG, stackedBarChartSVG, revenueByTypeInWindow, revenueTypeSeries, revenueTypeByYear };
 });

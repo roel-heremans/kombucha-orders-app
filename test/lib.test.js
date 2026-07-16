@@ -19,6 +19,11 @@ const DELIVS = [
     items: [{ sizeId: "1L", flavourId: "gin", quantity: 1 }], empties: [] },
 ];
 
+const CUSTS = [
+  { id: "A", name: "Alice", type: "restaurant" },
+  { id: "B", name: "Bob", type: "private" },
+];
+
 test("formatMoney formats to two decimals", () => {
   assert.strictEqual(KO.formatMoney(16), "16.00");
   assert.strictEqual(KO.formatMoney(4.5), "4.50");
@@ -238,4 +243,125 @@ test("orderStatusLabel maps statuses", () => {
   assert.strictEqual(KO.orderStatusLabel("delivered"), "✅ Delivered");
   assert.strictEqual(KO.orderStatusLabel("cancelled"), "✖ Cancelled");
   assert.strictEqual(KO.orderStatusLabel("weird"), "⏳ Requested");
+});
+
+test("monthKeysBetween is inclusive and ascending, across year boundary", () => {
+  assert.deepStrictEqual(KO.monthKeysBetween("2026-01", "2026-03"), ["2026-01", "2026-02", "2026-03"]);
+  assert.deepStrictEqual(KO.monthKeysBetween("2025-11", "2026-02"), ["2025-11", "2025-12", "2026-01", "2026-02"]);
+  assert.deepStrictEqual(KO.monthKeysBetween("2026-05", "2026-05"), ["2026-05"]);
+});
+
+test("monthKeysBetween returns [endMk] when start is after end", () => {
+  assert.deepStrictEqual(KO.monthKeysBetween("2026-08", "2026-03"), ["2026-03"]);
+});
+
+test("inWindow includes the range endpoints", () => {
+  assert.strictEqual(KO.inWindow("2026-06-15", "2026-06", "2026-07"), true);
+  assert.strictEqual(KO.inWindow("2026-07-01", "2026-06", "2026-07"), true);
+  assert.strictEqual(KO.inWindow("2025-05-31", "2026-06", "2026-07"), false);
+  assert.strictEqual(KO.inWindow("2026-08-01", "2026-06", "2026-07"), false);
+});
+
+test("revenueInWindow sums deliveries across the window", () => {
+  // DELIVS: A 2026-06-03 (2x1L=16), A 2026-06-10 (2x1L+10x270ml=16+45=61),
+  //         B 2026-06-15 (4x270ml=18), A 2026-07-01 (1x1L=8)
+  assert.strictEqual(KO.revenueInWindow(DELIVS, SIZES, "2026-06", "2026-06"), 95);
+  assert.strictEqual(KO.revenueInWindow(DELIVS, SIZES, "2026-06", "2026-07"), 103);
+  assert.strictEqual(KO.revenueInWindow(DELIVS, SIZES, "2026-08", "2026-09"), 0);
+});
+
+test("revenueByCustomerInWindow groups and sorts desc", () => {
+  const out = KO.revenueByCustomerInWindow(DELIVS, SIZES, "2026-06", "2026-07");
+  // A: 16+61+8=85, B: 18
+  assert.deepStrictEqual(out, [{ customerId: "A", amount: 85 }, { customerId: "B", amount: 18 }]);
+});
+
+test("flavourCountsInWindow counts quantities in the window, sorted desc", () => {
+  const out = KO.flavourCountsInWindow(DELIVS, "2026-06", "2026-06");
+  // June items: gin 2 + gin 2 + lem 10 + gin 4 => gin 8? A6/3 gin2, A6/10 gin2+lem10, B6/15 gin4
+  const gin = out.find((x) => x.flavourId === "gin");
+  const lem = out.find((x) => x.flavourId === "lem");
+  assert.strictEqual(gin.quantity, 8);
+  assert.strictEqual(lem.quantity, 10);
+  assert.strictEqual(out[0].quantity >= out[out.length - 1].quantity, true);
+});
+
+test("windowLabel formats single month, same-year range, and cross-year range", () => {
+  assert.strictEqual(KO.windowLabel("2026-07", "2026-07"), "Jul 2026");
+  assert.strictEqual(KO.windowLabel("2026-01", "2026-07"), "Jan–Jul 2026");
+  assert.strictEqual(KO.windowLabel("2025-11", "2026-02"), "Nov 2025–Feb 2026");
+});
+
+test("revenueByTypeInWindow splits private vs restaurant", () => {
+  // Window 2026-06..2026-07: A(restaurant)=16+61+8=85, B(private)=18
+  const out = KO.revenueByTypeInWindow(DELIVS, SIZES, CUSTS, "2026-06", "2026-07");
+  assert.deepStrictEqual(out, { private: 18, restaurant: 85, total: 103 });
+});
+
+test("revenueByTypeInWindow treats unknown/missing type as restaurant", () => {
+  const custs = [{ id: "A", name: "Alice" }]; // no type => restaurant; B absent => restaurant
+  const out = KO.revenueByTypeInWindow(DELIVS, SIZES, custs, "2026-06", "2026-07");
+  assert.deepStrictEqual(out, { private: 0, restaurant: 103, total: 103 });
+});
+
+test("revenueTypeSeries returns one entry per month key, in order", () => {
+  const out = KO.revenueTypeSeries(DELIVS, SIZES, CUSTS, ["2026-06", "2026-07"]);
+  assert.strictEqual(out.length, 2);
+  assert.deepStrictEqual(out[0], { monthKey: "2026-06", private: 18, restaurant: 77, total: 95 });
+  assert.deepStrictEqual(out[1], { monthKey: "2026-07", private: 0, restaurant: 8, total: 8 });
+});
+
+test("revenueTypeByYear aggregates per year ascending", () => {
+  const out = KO.revenueTypeByYear(DELIVS, SIZES, CUSTS);
+  assert.deepStrictEqual(out, [{ year: "2026", private: 18, restaurant: 85, total: 103 }]);
+});
+
+test("stackedBarChartSVG renders an svg with a rect per segment and the tip", () => {
+  const bars = [
+    { label: "Jun", tip: "Jun 2026 — Total €95", segments: [
+      { value: 18, color: "#3d6b8c" }, { value: 77, color: "#4a7c59" }] },
+    { label: "Jul", tip: "Jul 2026 — Total €8", segments: [
+      { value: 0, color: "#3d6b8c" }, { value: 8, color: "#4a7c59" }] },
+  ];
+  const svg = KO.stackedBarChartSVG(bars, { width: 320, height: 160 });
+  assert.match(svg, /^<svg /);
+  assert.strictEqual((svg.match(/<rect/g) || []).length, 4); // 2 bars x 2 segments
+  assert.match(svg, /data-tip="Jun 2026 — Total €95"/);
+  assert.match(svg, /fill="#4a7c59"/);
+  assert.match(svg, /fill="#3d6b8c"/);
+  assert.match(svg, />Jun</);
+});
+
+test("stackedBarChartSVG escapes the tip text", () => {
+  const svg = KO.stackedBarChartSVG(
+    [{ label: "X", tip: "a & b <c>", segments: [{ value: 1, color: "#000" }] }], {});
+  assert.match(svg, /data-tip="a &amp; b &lt;c&gt;"/);
+  assert.doesNotMatch(svg, /data-tip="a & b <c>"/);
+});
+
+test("stackedBarChartSVG tolerates empty data", () => {
+  const svg = KO.stackedBarChartSVG([], {});
+  assert.match(svg, /^<svg /);
+  assert.strictEqual((svg.match(/<rect/g) || []).length, 0);
+});
+
+test("resolveWindow this-month (and unknown preset) returns current month", () => {
+  assert.deepStrictEqual(KO.resolveWindow("this-month", null, null, "2026-07"), { startMk: "2026-07", endMk: "2026-07" });
+  assert.deepStrictEqual(KO.resolveWindow("bogus", null, null, "2026-07"), { startMk: "2026-07", endMk: "2026-07" });
+});
+
+test("resolveWindow last-month crosses the January boundary", () => {
+  assert.deepStrictEqual(KO.resolveWindow("last-month", null, null, "2026-01"), { startMk: "2025-12", endMk: "2025-12" });
+  assert.deepStrictEqual(KO.resolveWindow("last-month", null, null, "2026-07"), { startMk: "2026-06", endMk: "2026-06" });
+});
+
+test("resolveWindow this-year is year-to-date (start===end in January)", () => {
+  assert.deepStrictEqual(KO.resolveWindow("this-year", null, null, "2026-07"), { startMk: "2026-01", endMk: "2026-07" });
+  assert.deepStrictEqual(KO.resolveWindow("this-year", null, null, "2026-01"), { startMk: "2026-01", endMk: "2026-01" });
+});
+
+test("resolveWindow custom uses the pickers and collapses an inverted range", () => {
+  assert.deepStrictEqual(KO.resolveWindow("custom", "2026-03", "2026-05", "2026-07"), { startMk: "2026-03", endMk: "2026-05" });
+  assert.deepStrictEqual(KO.resolveWindow("custom", "2026-08", "2026-03", "2026-07"), { startMk: "2026-03", endMk: "2026-03" });
+  assert.deepStrictEqual(KO.resolveWindow("custom", null, null, "2026-07"), { startMk: "2026-07", endMk: "2026-07" });
 });

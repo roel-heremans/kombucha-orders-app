@@ -168,6 +168,7 @@
     window.APP.renderers = {};
 
     window.APP.render = function () {
+      if (window.APP.updateOrdersBadge) window.APP.updateOrdersBadge();
       const active = document.querySelector("nav button.active");
       const view = active ? active.dataset.view : "new";
       if (window.APP.renderers[view]) window.APP.renderers[view]();
@@ -529,6 +530,7 @@
     }
 
     A.renderers.orders = render;
+    A.updateOrdersBadge = updateBadge;
   });
   </script>
 

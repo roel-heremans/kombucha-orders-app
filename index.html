@@ -715,7 +715,7 @@
       container.innerHTML =
         `<div class="card"><h4>Account</h4><p class="muted">${A.user ? A.user.email : ""}</p>` +
           `<button class="link" id="logoutBtn">Log out</button></div>` +
-        `<div class="card"><h4>Bottle sizes & prices</h4>` +
+        `<div class="card"><details><summary>Bottle sizes &amp; prices</summary>` +
           st.sizes.map((s, i) =>
             `<div class="row" data-idx="${i}">` +
             `<div><label>Label</label><input class="s-label" value="${A.esc(s.label)}"/></div>` +
@@ -724,7 +724,7 @@
             `</div>`).join("") +
           `<label>Recibo header text</label><input id="recHeader" value="${A.esc(st.reciboHeader)}"/>` +
           `<button class="primary" id="saveSettings">Save settings</button>` +
-          `<p id="setMsg" class="muted"></p></div>` +
+          `<p id="setMsg" class="muted"></p></details></div>` +
         `<div class="card"><details><summary>Customers (${A.state.customers.length})</summary>` +
           `<p class="muted">Set each customer's type, NIF and notes. Add new customers from the New delivery screen.</p>` +
           A.state.customers.slice().sort((a,b)=>a.name.localeCompare(b.name)).map((c) =>
@@ -745,7 +745,7 @@
             `<div class="row"><div>${A.esc(f.name)}</div>` +
             `<button class="link" data-delflav="${f.id}" style="flex:0 0 60px">Delete</button></div>`).join("") +
           `</details></div>` +
-        `<div class="card"><h4>Restaurant logins</h4>` +
+        `<div class="card"><details><summary>Restaurant logins</summary>` +
           `<p class="muted">Create an app login so a restaurant can place their own orders.</p>` +
           `<label>Customer</label><select id="rlCust">` +
             A.state.customers.slice().sort((a,b)=>a.name.localeCompare(b.name)).map((c) =>
@@ -754,7 +754,7 @@
           `<label>Login email</label><input id="rlEmail" type="email"/>` +
           `<label>Initial password</label><input id="rlPw" type="text" value=""/>` +
           `<button class="primary" id="rlCreate">Create login</button>` +
-          `<p id="rlMsg" class="muted"></p></div>` +
+          `<p id="rlMsg" class="muted"></p></details></div>` +
         `<div class="card"><h4>Backup</h4>` +
           `<button class="link" id="exportBtn">Export all data (JSON)</button></div>`;
 

@@ -816,8 +816,12 @@
         rlCreate.disabled = true; msg.textContent = "Creating…";
         try {
           await A.createRestaurantLogin(customerId, email, pw);
-          msg.textContent = "Login created ✓ — give the restaurant this email + password.";
-        } catch (ex) { msg.textContent = "Failed: " + (ex.code || ex.message); }
+          const okMsg = container.querySelector("#rlMsg");
+          if (okMsg) okMsg.textContent = "Login created ✓ — give the restaurant this email + password.";
+        } catch (ex) {
+          const failMsg = container.querySelector("#rlMsg");
+          if (failMsg) failMsg.textContent = "Failed: " + (ex.code || ex.message);
+        }
         finally { rlCreate.disabled = false; }
       });
     }

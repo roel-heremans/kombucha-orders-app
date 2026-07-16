@@ -198,6 +198,21 @@
     return headerLines.concat([""]).concat(body).concat([separator, totalLine]).join("\n");
   }
 
+  function orderItemsSummary(order, sizes, flavourName) {
+    return (order.items || []).map(function (it) {
+      const s = sizeById(sizes, it.sizeId);
+      const label = s ? s.label : it.sizeId;
+      const fname = flavourName ? flavourName(it.flavourId) : it.flavourId;
+      return it.quantity + "x " + label + " " + fname;
+    }).join(", ");
+  }
+
+  function orderStatusLabel(status) {
+    if (status === "delivered") return "✅ Delivered";
+    if (status === "cancelled") return "✖ Cancelled";
+    return "⏳ Requested";
+  }
+
   function escapeXml(s) {
     return String(s).replace(/[<>&'"]/g, function (c) {
       return { "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" }[c];
@@ -234,5 +249,5 @@
       '" width="100%" role="img">' + bars + "</svg>";
   }
 
-  return { formatMoney, sizeById, deliveryRevenue, deliveryDepositRefund, monthKey, inMonth, monthName, dayOfMonth, recentMonthKeys, monthlyRevenue, revenueByCustomer, monthlyRevenueSeries, flavourCounts, revenueByCustomerType, outstandingByCustomer, reciboSizeLabel, generateRecibo, barChartSVG };
+  return { formatMoney, sizeById, deliveryRevenue, deliveryDepositRefund, monthKey, inMonth, monthName, dayOfMonth, recentMonthKeys, monthlyRevenue, revenueByCustomer, monthlyRevenueSeries, flavourCounts, revenueByCustomerType, outstandingByCustomer, reciboSizeLabel, generateRecibo, orderItemsSummary, orderStatusLabel, barChartSVG };
 });

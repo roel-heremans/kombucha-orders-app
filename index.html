@@ -531,15 +531,25 @@
     const container = document.getElementById("view-orders");
     const badge = document.getElementById("ordersBadge");
 
-    function sortedOrders() {
-      const rank = { requested: 0, delivered: 1, cancelled: 2 };
-      return A.state.orders.slice().sort(function (a, b) {
-        const r = (rank[a.status] || 0) - (rank[b.status] || 0);
-        if (r !== 0) return r;
-        const ta = (a.createdAt && a.createdAt.seconds) || 0;
-        const tb = (b.createdAt && b.createdAt.seconds) || 0;
-        return tb - ta;
-      });
+    let showFinished = false; // session-only: reveal Delivered/Cancelled history
+
+    function byNewest(a, b) {
+      const ta = (a.createdAt && a.createdAt.seconds) || 0;
+      const tb = (b.createdAt && b.createdAt.seconds) || 0;
+      return tb - ta;
+    }
+
+    function orderCard(o, sizes) {
+      const summary = KO.orderItemsSummary(o, sizes, A.flavourName);
+      const status = KO.orderStatusLabel(o.status);
+      const when = o.preferredDate ? `<div class="muted">Preferred: ${A.esc(o.preferredDate)}</div>` : "";
+      const note = o.note ? `<div class="muted">Note: ${A.esc(o.note)}</div>` : "";
+      const actions = o.status === "requested"
+        ? `<div class="row"><button class="primary" data-fulfil="${o.id}">Fulfil…</button>` +
+          `<button class="link" data-cancel="${o.id}">Cancel</button></div>`
+        : "";
+      return `<div class="card"><strong>${A.esc(A.customerName(o.customerId))}</strong> — ${status}` +
+        `<div>${A.esc(summary)}</div>${when}${note}${actions}</div>`;
     }
 
     function updateBadge() {
@@ -551,20 +561,21 @@
     function render() {
       updateBadge();
       const sizes = A.state.settings ? A.state.settings.sizes : [];
-      const orders = sortedOrders();
-      if (orders.length === 0) { container.innerHTML = "<p class='muted'>No orders yet.</p>"; return; }
-      container.innerHTML = orders.map(function (o) {
-        const summary = KO.orderItemsSummary(o, sizes, A.flavourName);
-        const status = KO.orderStatusLabel(o.status);
-        const when = o.preferredDate ? `<div class="muted">Preferred: ${A.esc(o.preferredDate)}</div>` : "";
-        const note = o.note ? `<div class="muted">Note: ${A.esc(o.note)}</div>` : "";
-        const actions = o.status === "requested"
-          ? `<div class="row"><button class="primary" data-fulfil="${o.id}">Fulfil…</button>` +
-            `<button class="link" data-cancel="${o.id}">Cancel</button></div>`
-          : "";
-        return `<div class="card"><strong>${A.esc(A.customerName(o.customerId))}</strong> — ${status}` +
-          `<div>${A.esc(summary)}</div>${when}${note}${actions}</div>`;
-      }).join("");
+      const pending = A.state.orders.filter((o) => o.status === "requested").slice().sort(byNewest);
+      const finished = A.state.orders.filter((o) => o.status !== "requested").slice().sort(byNewest);
+
+      let html = pending.length
+        ? pending.map((o) => orderCard(o, sizes)).join("")
+        : (A.state.orders.length ? "<p class='muted'>No pending orders.</p>" : "<p class='muted'>No orders yet.</p>");
+
+      if (showFinished) html += finished.map((o) => orderCard(o, sizes)).join("");
+
+      if (finished.length) {
+        html += `<p class="muted" style="margin-top:8px"><button class="link" id="toggleFinished">` +
+          (showFinished ? "Hide finished orders" : "Show finished orders (" + finished.length + ")") +
+          `</button></p>`;
+      }
+      container.innerHTML = html;
 
       container.querySelectorAll("[data-fulfil]").forEach((b) =>
         b.addEventListener("click", () => A.fulfilOrder(b.dataset.fulfil)));
@@ -572,6 +583,8 @@
         b.addEventListener("click", async () => {
           if (confirm("Cancel this order?")) await A.cancelOrder(b.dataset.cancel);
         }));
+      const tf = container.querySelector("#toggleFinished");
+      if (tf) tf.addEventListener("click", () => { showFinished = !showFinished; render(); });
     }
 
     A.renderers.orders = render;

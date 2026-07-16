@@ -18,6 +18,8 @@
     input, select, textarea { width:100%; padding:10px; font-size:16px; border:1px solid var(--line); border-radius:8px; background:#fff; }
     button.primary { background:var(--green); color:#fff; border:none; padding:12px; border-radius:8px; font-size:16px; width:100%; }
     button.link { background:none; border:none; color:var(--green); padding:6px 0; font-size:14px; }
+    summary { cursor:pointer; padding:4px 0; font-weight:600; }
+    #restaurantLogout { color:#fff; border:1px solid rgba(255,255,255,.75); border-radius:6px; padding:5px 12px; font-weight:600; text-decoration:none; }
     .row { display:flex; gap:8px; align-items:flex-end; }
     .row > * { flex:1; }
     table { width:100%; border-collapse:collapse; font-size:14px; }
@@ -723,7 +725,7 @@
           `<label>Recibo header text</label><input id="recHeader" value="${A.esc(st.reciboHeader)}"/>` +
           `<button class="primary" id="saveSettings">Save settings</button>` +
           `<p id="setMsg" class="muted"></p></div>` +
-        `<div class="card"><h4>Customers</h4>` +
+        `<div class="card"><details><summary>Customers (${A.state.customers.length})</summary>` +
           `<p class="muted">Set each customer's type, NIF and notes. Add new customers from the New delivery screen.</p>` +
           A.state.customers.slice().sort((a,b)=>a.name.localeCompare(b.name)).map((c) =>
             `<div class="cust-edit" data-cid="${c.id}" style="border-top:1px solid var(--line);padding-top:8px;margin-top:8px">` +
@@ -737,12 +739,12 @@
             `<div class="row"><button class="link c-save">Save</button>` +
             `<button class="link" data-delcust="${c.id}" style="flex:0 0 60px">Delete</button></div>` +
             `</div>`).join("") +
-          `</div>` +
-        `<div class="card"><h4>Flavours</h4>` +
+          `</details></div>` +
+        `<div class="card"><details><summary>Flavours (${A.state.flavours.length})</summary>` +
           A.state.flavours.slice().sort((a,b)=>a.name.localeCompare(b.name)).map((f) =>
             `<div class="row"><div>${A.esc(f.name)}</div>` +
             `<button class="link" data-delflav="${f.id}" style="flex:0 0 60px">Delete</button></div>`).join("") +
-          `</div>` +
+          `</details></div>` +
         `<div class="card"><h4>Restaurant logins</h4>` +
           `<p class="muted">Create an app login so a restaurant can place their own orders.</p>` +
           `<label>Customer</label><select id="rlCust">` +

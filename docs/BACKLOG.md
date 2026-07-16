@@ -8,20 +8,7 @@ Status legend: 🟡 next · ⚪ planned · 💡 idea / deferred · ✅ done
 
 ---
 
-## Project A — Dashboard analytics 🟡 (in progress)
-
-Shared backbone: a selectable reporting **time window** that drives every stat
-and chart, plus a **revenue split by customer type** (Private vs Restaurant vs
-total) reused across charts.
-
-- **A1. Revenue chart split by type** — the monthly revenue bar chart shows, per
-  month, the split between Private and Restaurant plus the combined total.
-- **A2. Date-range / last-month view** — choose a start & end month (or a "last
-  month" quick pick); all dashboard stats and graphs recompute for that window.
-- **A3. Yearly revenue chart** — a chart of revenue per year, also split into
-  Private, Restaurant, and the sum.
-
-## Project B — Recibo Verde PDF distribution ⚪ (planned, after A)
+## Project B — Recibo Verde PDF distribution 🟡 (next)
 
 Separate subsystem — needs Firebase Storage, storage security rules, admin
 upload UI, and a restaurant download section.
@@ -46,6 +33,10 @@ upload UI, and a restaurant download section.
 
 ## Done ✅
 
+- **Project A — Dashboard analytics**: selectable time window (This month / Last
+  month / This year / Custom range) driving all windowed stats; revenue split by
+  customer type (Private/Restaurant/total) in a stacked monthly chart + window
+  totals; all-years yearly split chart; removed the old by-customer-type table.
 - Restaurant ordering: role-based split, orders collection, admin Orders tab
   (pending-only default + show-finished toggle), fulfil→delivery flow, restaurant
   order form + own history + cancel, in-app restaurant login creation, role-based

@@ -374,3 +374,8 @@ test("resolveWindow custom uses the pickers and collapses an inverted range", ()
   assert.deepStrictEqual(KO.resolveWindow("custom", "2026-08", "2026-03", "2026-07"), { startMk: "2026-03", endMk: "2026-03" });
   assert.deepStrictEqual(KO.resolveWindow("custom", null, null, "2026-07"), { startMk: "2026-07", endMk: "2026-07" });
 });
+
+test("reciboDocId builds a deterministic customer_month id", () => {
+  assert.strictEqual(KO.reciboDocId("abc123", "2026-07"), "abc123_2026-07");
+  assert.strictEqual(KO.reciboDocId("x", "2025-12"), "x_2025-12");
+});

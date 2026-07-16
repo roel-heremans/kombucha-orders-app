@@ -374,7 +374,8 @@
     function buildForm() {
       container.innerHTML =
         `<div class="card">` +
-        `<h3>${editing ? "Edit" : "New"} delivery</h3>` +
+        `<h3>${editing ? "Edit" : fulfilling ? "Fulfil order" : "New"} delivery</h3>` +
+        (fulfilling && !editing ? `<p class="muted">Fulfilling a requested order — saving will mark it delivered.</p>` : "") +
         `<label>Customer</label><select id="cust">${customerOptionsHtml("")}</select>` +
         `<label>Date</label><input id="date" type="date" value="${todayStr()}"/>` +
         `<h4>Bottles delivered</h4><div id="items"></div>` +
@@ -384,7 +385,7 @@
         `<p><strong>Subtotal: €<span id="subtotal">0.00</span></strong></p>` +
         `<p id="formErr" class="muted"></p>` +
         `<button class="primary" id="save">${editing ? "Update" : "Save"} delivery</button>` +
-        (editing ? `<button class="link" id="cancelEdit">Cancel edit</button>` : "") +
+        ((editing || fulfilling) ? `<button class="link" id="cancelEdit">${editing ? "Cancel edit" : "Cancel fulfilment"}</button>` : "") +
         `</div>`;
 
       const itemsDiv = container.querySelector("#items");
@@ -399,7 +400,7 @@
       });
       container.querySelector("#addItem").addEventListener("click", (e) => { e.preventDefault(); itemsDiv.appendChild(itemRow()); });
       container.querySelector("#save").addEventListener("click", onSave);
-      if (editing) container.querySelector("#cancelEdit").addEventListener("click", (e) => { e.preventDefault(); editing = null; fulfilling = null; built = false; renderNew(); });
+      if (editing || fulfilling) container.querySelector("#cancelEdit").addEventListener("click", (e) => { e.preventDefault(); editing = null; fulfilling = null; built = false; renderNew(); });
       built = true;
       updateSubtotal();
     }
@@ -798,6 +799,7 @@
           version: 1, exportedAt: new Date().toISOString(),
           settings: A.state.settings, customers: A.state.customers,
           flavours: A.state.flavours, deliveries: A.state.deliveries,
+          orders: A.state.orders,
         };
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
         const url = URL.createObjectURL(blob);

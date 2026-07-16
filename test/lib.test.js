@@ -239,3 +239,50 @@ test("orderStatusLabel maps statuses", () => {
   assert.strictEqual(KO.orderStatusLabel("cancelled"), "✖ Cancelled");
   assert.strictEqual(KO.orderStatusLabel("weird"), "⏳ Requested");
 });
+
+test("monthKeysBetween is inclusive and ascending, across year boundary", () => {
+  assert.deepStrictEqual(KO.monthKeysBetween("2026-01", "2026-03"), ["2026-01", "2026-02", "2026-03"]);
+  assert.deepStrictEqual(KO.monthKeysBetween("2025-11", "2026-02"), ["2025-11", "2025-12", "2026-01", "2026-02"]);
+  assert.deepStrictEqual(KO.monthKeysBetween("2026-05", "2026-05"), ["2026-05"]);
+});
+
+test("monthKeysBetween returns [endMk] when start is after end", () => {
+  assert.deepStrictEqual(KO.monthKeysBetween("2026-08", "2026-03"), ["2026-03"]);
+});
+
+test("inWindow includes the range endpoints", () => {
+  assert.strictEqual(KO.inWindow("2026-06-15", "2026-06", "2026-07"), true);
+  assert.strictEqual(KO.inWindow("2026-07-01", "2026-06", "2026-07"), true);
+  assert.strictEqual(KO.inWindow("2025-05-31", "2026-06", "2026-07"), false);
+  assert.strictEqual(KO.inWindow("2026-08-01", "2026-06", "2026-07"), false);
+});
+
+test("revenueInWindow sums deliveries across the window", () => {
+  // DELIVS: A 2026-06-03 (2x1L=16), A 2026-06-10 (2x1L+10x270ml=16+45=61),
+  //         B 2026-06-15 (4x270ml=18), A 2026-07-01 (1x1L=8)
+  assert.strictEqual(KO.revenueInWindow(DELIVS, SIZES, "2026-06", "2026-06"), 95);
+  assert.strictEqual(KO.revenueInWindow(DELIVS, SIZES, "2026-06", "2026-07"), 103);
+  assert.strictEqual(KO.revenueInWindow(DELIVS, SIZES, "2026-08", "2026-09"), 0);
+});
+
+test("revenueByCustomerInWindow groups and sorts desc", () => {
+  const out = KO.revenueByCustomerInWindow(DELIVS, SIZES, "2026-06", "2026-07");
+  // A: 16+61+8=85, B: 18
+  assert.deepStrictEqual(out, [{ customerId: "A", amount: 85 }, { customerId: "B", amount: 18 }]);
+});
+
+test("flavourCountsInWindow counts quantities in the window, sorted desc", () => {
+  const out = KO.flavourCountsInWindow(DELIVS, "2026-06", "2026-06");
+  // June items: gin 2 + gin 2 + lem 10 + gin 4 => gin 8? A6/3 gin2, A6/10 gin2+lem10, B6/15 gin4
+  const gin = out.find((x) => x.flavourId === "gin");
+  const lem = out.find((x) => x.flavourId === "lem");
+  assert.strictEqual(gin.quantity, 8);
+  assert.strictEqual(lem.quantity, 10);
+  assert.strictEqual(out[0].quantity >= out[out.length - 1].quantity, true);
+});
+
+test("windowLabel formats single month, same-year range, and cross-year range", () => {
+  assert.strictEqual(KO.windowLabel("2026-07", "2026-07"), "Jul 2026");
+  assert.strictEqual(KO.windowLabel("2026-01", "2026-07"), "Jan–Jul 2026");
+  assert.strictEqual(KO.windowLabel("2025-11", "2026-02"), "Nov 2025–Feb 2026");
+});

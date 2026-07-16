@@ -51,6 +51,63 @@
     return keys;
   }
 
+  function monthKeysBetween(startMk, endMk) {
+    if (startMk > endMk) return [endMk];
+    let y = parseInt(startMk.slice(0, 4), 10);
+    let m = parseInt(startMk.slice(5, 7), 10);
+    const ey = parseInt(endMk.slice(0, 4), 10);
+    const em = parseInt(endMk.slice(5, 7), 10);
+    const keys = [];
+    while (y < ey || (y === ey && m <= em)) {
+      keys.push(y + "-" + String(m).padStart(2, "0"));
+      m++; if (m === 13) { m = 1; y++; }
+    }
+    return keys;
+  }
+
+  function inWindow(dateStr, startMk, endMk) {
+    const mk = monthKey(dateStr);
+    return mk >= startMk && mk <= endMk;
+  }
+
+  function revenueInWindow(deliveries, sizes, startMk, endMk) {
+    return deliveries.reduce(function (sum, d) {
+      return inWindow(d.date, startMk, endMk) ? sum + deliveryRevenue(d, sizes) : sum;
+    }, 0);
+  }
+
+  function revenueByCustomerInWindow(deliveries, sizes, startMk, endMk) {
+    const byId = {};
+    deliveries.forEach(function (d) {
+      if (!inWindow(d.date, startMk, endMk)) return;
+      byId[d.customerId] = (byId[d.customerId] || 0) + deliveryRevenue(d, sizes);
+    });
+    return Object.keys(byId)
+      .map(function (id) { return { customerId: id, amount: byId[id] }; })
+      .sort(function (a, b) { return b.amount - a.amount; });
+  }
+
+  function flavourCountsInWindow(deliveries, startMk, endMk) {
+    const byId = {};
+    deliveries.forEach(function (d) {
+      if (!inWindow(d.date, startMk, endMk)) return;
+      (d.items || []).forEach(function (it) {
+        byId[it.flavourId] = (byId[it.flavourId] || 0) + it.quantity;
+      });
+    });
+    return Object.keys(byId)
+      .map(function (id) { return { flavourId: id, quantity: byId[id] }; })
+      .sort(function (a, b) { return b.quantity - a.quantity; });
+  }
+
+  function windowLabel(startMk, endMk) {
+    const abbr = function (mk) { return monthName(mk).slice(0, 3); };
+    const year = function (mk) { return mk.slice(0, 4); };
+    if (startMk === endMk) return abbr(startMk) + " " + year(startMk);
+    if (year(startMk) === year(endMk)) return abbr(startMk) + "–" + abbr(endMk) + " " + year(endMk);
+    return abbr(startMk) + " " + year(startMk) + "–" + abbr(endMk) + " " + year(endMk);
+  }
+
   function monthlyRevenue(deliveries, sizes, mk) {
     return deliveries.reduce(function (sum, d) {
       return inMonth(d.date, mk) ? sum + deliveryRevenue(d, sizes) : sum;
@@ -249,5 +306,5 @@
       '" width="100%" role="img">' + bars + "</svg>";
   }
 
-  return { formatMoney, sizeById, deliveryRevenue, deliveryDepositRefund, monthKey, inMonth, monthName, dayOfMonth, recentMonthKeys, monthlyRevenue, revenueByCustomer, monthlyRevenueSeries, flavourCounts, revenueByCustomerType, outstandingByCustomer, reciboSizeLabel, generateRecibo, orderItemsSummary, orderStatusLabel, barChartSVG };
+  return { formatMoney, sizeById, deliveryRevenue, deliveryDepositRefund, monthKey, inMonth, monthName, dayOfMonth, recentMonthKeys, monthKeysBetween, inWindow, revenueInWindow, revenueByCustomerInWindow, flavourCountsInWindow, windowLabel, monthlyRevenue, revenueByCustomer, monthlyRevenueSeries, flavourCounts, revenueByCustomerType, outstandingByCustomer, reciboSizeLabel, generateRecibo, orderItemsSummary, orderStatusLabel, barChartSVG };
 });

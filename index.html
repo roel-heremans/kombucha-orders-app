@@ -26,6 +26,9 @@
     .hidden { display:none; }
     pre { white-space:pre-wrap; background:#f4f3ee; padding:12px; border-radius:8px; font-size:13px; overflow-x:auto; }
     .banner { background:#fff3cd; color:#7a5b00; padding:8px 16px; font-size:13px; text-align:center; }
+    .badge { display:inline-block; min-width:18px; padding:0 5px; border-radius:9px;
+      background:#c0392b; color:#fff; font-size:11px; line-height:18px; text-align:center; }
+    .badge.hidden { display:none; }
   </style>
 </head>
 <body>
@@ -50,6 +53,7 @@
     <nav>
       <button data-view="new" class="active">New</button>
       <button data-view="deliveries">Deliveries</button>
+      <button data-view="orders">Orders <span id="ordersBadge" class="badge hidden"></span></button>
       <button data-view="dashboard">Dashboard</button>
       <button data-view="recibo">Recibo</button>
       <button data-view="settings">Settings</button>
@@ -57,20 +61,30 @@
     <main>
       <div id="view-new" class="view"></div>
       <div id="view-deliveries" class="view hidden"></div>
+      <div id="view-orders" class="view hidden"></div>
       <div id="view-dashboard" class="view hidden"></div>
       <div id="view-recibo" class="view hidden"></div>
       <div id="view-settings" class="view hidden"></div>
     </main>
   </div>
 
+  <!-- Restaurant view (non-admin users) -->
+  <div id="restaurantView" class="hidden">
+    <header style="padding:12px 16px;border-bottom:1px solid var(--line)">
+      <strong id="restaurantTitle">Kombucha orders</strong>
+      <button class="link" id="restaurantLogout" style="float:right">Log out</button>
+    </header>
+    <main id="restaurantBody" style="padding:16px"></main>
+  </div>
+
   <script src="lib.js"></script>
   <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut }
+    import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword }
       from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+    import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
     import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager }
       from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-    import { collection, doc, onSnapshot, addDoc, setDoc, updateDoc, deleteDoc, getDoc }
+    import { collection, doc, onSnapshot, addDoc, setDoc, updateDoc, deleteDoc, getDoc, query, where, serverTimestamp }
       from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
     // Replace with your Firebase web app config (see docs/FIREBASE_SETUP.md)
@@ -83,6 +97,8 @@
       appId: "1:260178477505:web:cc670a3534ca6469f9ef40",
     };
 
+    const ADMIN_EMAILS = ["roel.heremans@gmail.com", "reissnina@gmail.com"];
+
     const app = initializeApp(FIREBASE_CONFIG);
     const auth = getAuth(app);
     const db = initializeFirestore(app, {
@@ -90,7 +106,7 @@
     });
 
     // Expose to later-task code via a single namespace.
-    window.APP = { app, auth, db, state: { customers: [], flavours: [], deliveries: [], settings: null }, current: {} };
+    window.APP = { app, auth, db, state: { customers: [], flavours: [], deliveries: [], orders: [], settings: null }, current: {} };
     window.APP.esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
 
     // Online/offline banner
@@ -112,15 +128,28 @@
 
     window.APP.logout = () => signOut(auth);
 
+    const restaurantView = document.getElementById("restaurantView");
+    document.getElementById("restaurantLogout").addEventListener("click", () => signOut(auth));
+
     onAuthStateChanged(auth, (user) => {
-      if (user) {
-        window.APP.user = user;
-        loginView.classList.add("hidden");
-        appView.classList.remove("hidden");
-        if (window.APP.onLogin) window.APP.onLogin(); // data layer subscribes (Task 9)
-      } else {
+      if (!user) {
         loginView.classList.remove("hidden");
         appView.classList.add("hidden");
+        restaurantView.classList.add("hidden");
+        return;
+      }
+      window.APP.user = user;
+      loginView.classList.add("hidden");
+      if (ADMIN_EMAILS.includes(user.email)) {
+        window.APP.role = "admin";
+        restaurantView.classList.add("hidden");
+        appView.classList.remove("hidden");
+        if (window.APP.onLogin) window.APP.onLogin();
+      } else {
+        window.APP.role = "restaurant";
+        appView.classList.add("hidden");
+        restaurantView.classList.remove("hidden");
+        if (window.APP.onRestaurantLogin) window.APP.onRestaurantLogin(user.uid);
       }
     });
 
@@ -180,6 +209,31 @@
       watch("deliveries", S.deliveries);
       window.APP.render();
     };
+
+    window.APP.onRestaurantLogin = function (uid) {
+      // Reference data (rules allow any signed-in user to read these).
+      const settingsRef = doc(db, "settings", "app");
+      onSnapshot(settingsRef, (d) => { S.settings = d.exists() ? d.data() : DEFAULT_SETTINGS; window.APP.renderRestaurant(); });
+      onSnapshot(collection(db, "flavours"), (snap) => {
+        S.flavours.length = 0;
+        snap.forEach((d) => S.flavours.push(Object.assign({ id: d.id }, d.data())));
+        window.APP.renderRestaurant();
+      });
+      // Own customer doc (matched by uid).
+      onSnapshot(query(collection(db, "customers"), where("uid", "==", uid)), (snap) => {
+        const list = [];
+        snap.forEach((d) => list.push(Object.assign({ id: d.id }, d.data())));
+        window.APP.myCustomer = list[0] || null;
+        window.APP.renderRestaurant();
+      });
+      // Own orders.
+      onSnapshot(query(collection(db, "orders"), where("customerUid", "==", uid)), (snap) => {
+        S.orders.length = 0;
+        snap.forEach((d) => S.orders.push(Object.assign({ id: d.id }, d.data())));
+        window.APP.renderRestaurant();
+      });
+    };
+    window.APP.renderRestaurant = function () {}; // replaced in Task 6
 
     // CRUD
     window.APP.addDelivery = (o) => addDoc(collection(db, "deliveries"), o);

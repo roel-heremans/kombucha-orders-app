@@ -843,6 +843,12 @@
         ruUpload.disabled = true; setMsg("Uploading…");
         try {
           const base64 = await fileToBase64(file);
+          const head = base64.length >= 8 ? atob(base64.substring(0, 8)) : "";
+          if (head.indexOf("%PDF") !== 0) {
+            setMsg("That file is not a valid PDF.");
+            ruUpload.disabled = false;
+            return;
+          }
           await A.uploadRecibo(custId, cust.uid, mk, file.name, file.size, base64, A.user ? A.user.email : "");
           const m = container.querySelector("#ruMsg"); if (m) m.textContent = "Uploaded ✓";
         } catch (ex) {

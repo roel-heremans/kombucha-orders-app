@@ -51,8 +51,8 @@ maintain. Not worth it for this size of app.
 
 ### Creating a restaurant login (no backend)
 
-From a new admin **"Restaurant logins"** area (in Settings or the Orders tab),
-the admin picks/creates a customer, enters an email + initial password, and the
+From a new admin **"Restaurant logins"** area in the **Settings** view, the
+admin picks/creates a customer, enters an email + initial password, and the
 app creates the auth user using a **secondary Firebase app instance** in the
 browser:
 
@@ -176,9 +176,9 @@ deliveries, or revenue.
 4. On save, the normal delivery is created **and** the order is updated:
    `status: "delivered"`, `deliveryId` = new delivery's id. It leaves the pending
    list; the tab badge decrements.
-5. **Restaurant logins** admin area: create a login (email + password) for a
-   customer and link it (stores `uid` + `email` on the customer). Lists which
-   customers have logins.
+5. **Restaurant logins** section in the **Settings** view: create a login (email
+   + password) for a customer and link it (stores `uid` + `email` on the
+   customer). Lists which customers have logins.
 
 ## App structure / implementation notes
 

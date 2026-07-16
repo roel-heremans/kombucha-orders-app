@@ -597,55 +597,126 @@
     const A = window.APP, KO = window.KO;
     const container = document.getElementById("view-dashboard");
 
+    const TYPE_COLORS = { private: "#3d6b8c", restaurant: "#4a7c59" };
+
     function currentMonthKey() {
       const d = new Date();
       return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
     }
 
+    function resolveWindow(w) {
+      const cur = currentMonthKey();
+      if (w.preset === "last-month") { const p = KO.recentMonthKeys(cur, 2)[0]; return { startMk: p, endMk: p }; }
+      if (w.preset === "this-year") { return { startMk: cur.slice(0, 4) + "-01", endMk: cur }; }
+      if (w.preset === "custom") {
+        let s = w.startMk || cur, e = w.endMk || cur;
+        if (s > e) s = e;
+        return { startMk: s, endMk: e };
+      }
+      return { startMk: cur, endMk: cur }; // this-month (default)
+    }
+
+    function euro(v) { return "€" + KO.formatMoney(v); }
+
+    function legendHtml(items) {
+      return `<div class="muted" style="margin-top:6px;font-size:12px">` +
+        items.map((it) =>
+          `<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${it.color};margin:0 4px 0 10px;vertical-align:middle"></span>${A.esc(it.label)}`
+        ).join("") + `</div>`;
+    }
+
+    function typeBars(rows, labelOf) {
+      // rows: [{ private, restaurant, total, ... }]; labelOf(row) -> {label, tipLabel}
+      return rows.map((r) => {
+        const meta = labelOf(r);
+        return {
+          label: meta.label,
+          tip: `${meta.tipLabel} — Private ${euro(r.private)} · Restaurant ${euro(r.restaurant)} · Total ${euro(r.total)}`,
+          segments: [
+            { value: r.private, color: TYPE_COLORS.private },
+            { value: r.restaurant, color: TYPE_COLORS.restaurant },
+          ],
+        };
+      });
+    }
+
     function render() {
       const sizes = A.state.settings ? A.state.settings.sizes : [];
-      const mk = A.current.dashMonth || (A.current.dashMonth = currentMonthKey());
-      const revenue = KO.monthlyRevenue(A.state.deliveries, sizes, mk);
-      const byCust = KO.revenueByCustomer(A.state.deliveries, sizes, mk);
-      const series = KO.monthlyRevenueSeries(A.state.deliveries, sizes, KO.recentMonthKeys(mk, 6));
-      const outstanding = KO.outstandingByCustomer(A.state.deliveries, sizes);
-      const flavours = KO.flavourCounts(A.state.deliveries, mk);
-      const byType = KO.revenueByCustomerType(A.state.deliveries, sizes, A.state.customers, mk);
+      const w = A.current.dashWindow || (A.current.dashWindow = { preset: "this-month" });
+      const { startMk, endMk } = resolveWindow(w);
+      const label = KO.windowLabel(startMk, endMk);
 
-      const euro = (v) => "€" + KO.formatMoney(v);
-      const revChart = KO.barChartSVG(
-        series.map((s) => ({ label: KO.monthName(s.monthKey).slice(0, 3), title: KO.monthName(s.monthKey) + " " + s.monthKey.slice(0, 4), value: s.amount })),
-        { format: euro });
+      const monthKeys = KO.monthKeysBetween(startMk, endMk);
+      const typeSeries = KO.revenueTypeSeries(A.state.deliveries, sizes, A.state.customers, monthKeys);
+      const winTotals = KO.revenueByTypeInWindow(A.state.deliveries, sizes, A.state.customers, startMk, endMk);
+      const byCust = KO.revenueByCustomerInWindow(A.state.deliveries, sizes, startMk, endMk);
+      const flavours = KO.flavourCountsInWindow(A.state.deliveries, startMk, endMk);
+      const outstanding = KO.outstandingByCustomer(A.state.deliveries, sizes);
+      const yearly = KO.revenueTypeByYear(A.state.deliveries, sizes, A.state.customers);
+
+      const monthChart = KO.stackedBarChartSVG(
+        typeBars(typeSeries, (r) => ({ label: KO.monthName(r.monthKey).slice(0, 3), tipLabel: KO.windowLabel(r.monthKey, r.monthKey) })),
+        {});
+      const yearChart = KO.stackedBarChartSVG(
+        typeBars(yearly, (r) => ({ label: r.year, tipLabel: r.year })),
+        {});
       const custChart = KO.barChartSVG(
         byCust.map((c) => ({ label: A.customerName(c.customerId).slice(0, 6), title: A.customerName(c.customerId), value: c.amount })),
         { format: euro });
+      const typeLegend = legendHtml([
+        { label: "Private", color: TYPE_COLORS.private },
+        { label: "Restaurant", color: TYPE_COLORS.restaurant },
+      ]);
 
+      const isCustom = w.preset === "custom";
       container.innerHTML =
-        `<div class="card"><label>Month</label><input id="dashMonth" type="month" value="${mk}"/></div>` +
-        `<div class="card"><h3>Revenue: €${KO.formatMoney(revenue)}</h3>` +
-          `<div class="chartwrap"><div class="chart-tip muted">Tap a bar to see its value</div>${revChart}</div></div>` +
+        `<div class="card"><label>Window</label>` +
+          `<select id="dashPreset">` +
+            `<option value="this-month" ${w.preset === "this-month" ? "selected" : ""}>This month</option>` +
+            `<option value="last-month" ${w.preset === "last-month" ? "selected" : ""}>Last month</option>` +
+            `<option value="this-year" ${w.preset === "this-year" ? "selected" : ""}>This year</option>` +
+            `<option value="custom" ${isCustom ? "selected" : ""}>Custom range…</option>` +
+          `</select>` +
+          (isCustom ?
+            `<div class="row"><div><label>Start</label><input id="dashStart" type="month" value="${startMk}"/></div>` +
+            `<div><label>End</label><input id="dashEnd" type="month" value="${endMk}"/></div></div>` : "") +
+          `<p class="muted" style="margin-top:6px">Showing: ${A.esc(label)}</p></div>` +
+        `<div class="card"><h3>Revenue: ${euro(winTotals.total)}</h3>` +
+          `<p class="muted">Private ${euro(winTotals.private)} · Restaurant ${euro(winTotals.restaurant)}</p>` +
+          `<div class="chartwrap"><div class="chart-tip muted">Tap a bar to see its value</div>${monthChart}</div>` +
+          typeLegend + `</div>` +
+        `<div class="card"><h4>Yearly revenue (all years)</h4>` +
+          (yearly.length ? `<div class="chartwrap"><div class="chart-tip muted">Tap a bar to see its value</div>${yearChart}</div>` + typeLegend
+            : "<p class='muted'>No revenue yet.</p>") + `</div>` +
         `<div class="card"><h4>By customer</h4>` +
           (byCust.length ? `<div class="chartwrap"><div class="chart-tip muted">Tap a bar to see its value</div>${custChart}</div>` + "<table>" + byCust.map((c) =>
-            `<tr><td>${A.esc(A.customerName(c.customerId))}</td><td>€${KO.formatMoney(c.amount)}</td></tr>`).join("") + "</table>"
-            : "<p class='muted'>No revenue this month.</p>") + `</div>` +
-        `<div class="card"><h4>By customer type</h4>` +
-          (byType.length ? "<table>" + byType.map((t) =>
-            `<tr><td>${t.type === "private" ? "Private" : "Restaurant"}</td><td>€${KO.formatMoney(t.amount)}</td></tr>`).join("") + "</table>"
-            : "<p class='muted'>No revenue this month.</p>") + `</div>` +
+            `<tr><td>${A.esc(A.customerName(c.customerId))}</td><td>${euro(c.amount)}</td></tr>`).join("") + "</table>"
+            : "<p class='muted'>No revenue in this window.</p>") + `</div>` +
         `<div class="card"><h4>Outstanding bottles & deposit</h4>` +
           (outstanding.length ? "<table><tr><th>Customer</th><th>Out</th><th>Deposit</th></tr>" +
             outstanding.map((o) =>
               `<tr><td>${A.esc(A.customerName(o.customerId))}</td>` +
               `<td>${Object.keys(o.perSize).map((sid) => { const s = KO.sizeById(sizes, sid); return o.perSize[sid] + "× " + A.esc(s ? s.label : sid); }).join(", ") || "0"}</td>` +
-              `<td>€${KO.formatMoney(o.depositHeld)}</td></tr>`).join("") + "</table>"
+              `<td>${euro(o.depositHeld)}</td></tr>`).join("") + "</table>"
             : "<p class='muted'>Nothing outstanding.</p>") + `</div>` +
-        `<div class="card"><h4>Flavour popularity (${KO.monthName(mk)})</h4>` +
+        `<div class="card"><h4>Flavour popularity (${A.esc(label)})</h4>` +
           (flavours.length ? "<table>" + flavours.map((f) =>
             `<tr><td>${A.esc(A.flavourName(f.flavourId))}</td><td>${f.quantity}</td></tr>`).join("") + "</table>"
-            : "<p class='muted'>No deliveries this month.</p>") + `</div>`;
+            : "<p class='muted'>No deliveries in this window.</p>") + `</div>`;
 
-      container.querySelector("#dashMonth").addEventListener("change", (e) => {
-        A.current.dashMonth = e.target.value; render();
+      container.querySelector("#dashPreset").addEventListener("change", (e) => {
+        A.current.dashWindow = { preset: e.target.value, startMk, endMk };
+        render();
+      });
+      const startInp = container.querySelector("#dashStart");
+      const endInp = container.querySelector("#dashEnd");
+      if (startInp) startInp.addEventListener("change", (e) => {
+        A.current.dashWindow = { preset: "custom", startMk: e.target.value, endMk };
+        render();
+      });
+      if (endInp) endInp.addEventListener("change", (e) => {
+        A.current.dashWindow = { preset: "custom", startMk, endMk: e.target.value };
+        render();
       });
     }
 

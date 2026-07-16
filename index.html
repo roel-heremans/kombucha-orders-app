@@ -257,6 +257,7 @@
     const A = window.APP, KO = window.KO;
     const container = document.getElementById("view-new");
     let editing = null; // delivery id being edited, or null
+    let fulfilling = null; // order id being fulfilled, or null
     let built = false;  // whether the form shell is currently built
 
     function sizeOptions(selected) {
@@ -382,7 +383,7 @@
       });
       container.querySelector("#addItem").addEventListener("click", (e) => { e.preventDefault(); itemsDiv.appendChild(itemRow()); });
       container.querySelector("#save").addEventListener("click", onSave);
-      if (editing) container.querySelector("#cancelEdit").addEventListener("click", (e) => { e.preventDefault(); editing = null; built = false; renderNew(); });
+      if (editing) container.querySelector("#cancelEdit").addEventListener("click", (e) => { e.preventDefault(); editing = null; fulfilling = null; built = false; renderNew(); });
       built = true;
       updateSubtotal();
     }
@@ -402,7 +403,11 @@
       if (d.items.length === 0) { err.textContent = "Add at least one bottle line."; return; }
       try {
         if (editing) { await A.updateDelivery(editing, d); editing = null; }
-        else { d.enteredBy = A.user ? A.user.email : ""; await A.addDelivery(d); }
+        else {
+          d.enteredBy = A.user ? A.user.email : "";
+          const ref = await A.addDelivery(d);
+          if (fulfilling) { await A.setOrderDelivered(fulfilling, ref.id); fulfilling = null; }
+        }
         built = false;
         renderNew();
         container.querySelector("#formErr").textContent = "Saved ✓";
@@ -426,6 +431,24 @@
         if (inp) inp.value = emp.quantity;
       });
       container.querySelector("#note").value = d.note || "";
+      updateSubtotal();
+      document.querySelector('nav button[data-view="new"]').click();
+    };
+
+    A.fulfilOrder = function (orderId) {
+      const o = A.state.orders.find((x) => x.id === orderId);
+      if (!o) return;
+      editing = null;
+      fulfilling = orderId;
+      built = false;
+      renderNew();
+      container.querySelector("#cust").value = o.customerId;
+      if (o.preferredDate) container.querySelector("#date").value = o.preferredDate;
+      const itemsDiv = container.querySelector("#items");
+      itemsDiv.innerHTML = "";
+      (o.items || []).forEach((it) => itemsDiv.appendChild(itemRow(it)));
+      if ((o.items || []).length === 0) itemsDiv.appendChild(itemRow());
+      container.querySelector("#note").value = o.note || "";
       updateSubtotal();
       document.querySelector('nav button[data-view="new"]').click();
     };

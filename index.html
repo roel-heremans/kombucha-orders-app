@@ -839,6 +839,18 @@
     const A = window.APP, KO = window.KO;
     const body = document.getElementById("restaurantBody");
     const title = document.getElementById("restaurantTitle");
+    let showCleared = false; // session-only: reveal locally-hidden finished orders
+
+    // "Cleared" finished orders are hidden from this device only (localStorage);
+    // nothing is deleted and admins still see every order.
+    function hiddenKey() { return "ko_hidden_orders_" + (A.user ? A.user.uid : ""); }
+    function getHidden() {
+      try { return new Set(JSON.parse(localStorage.getItem(hiddenKey()) || "[]")); }
+      catch (e) { return new Set(); }
+    }
+    function saveHidden(set) {
+      try { localStorage.setItem(hiddenKey(), JSON.stringify(Array.from(set))); } catch (e) {}
+    }
 
     function sizeOptions() {
       return (A.state.settings ? A.state.settings.sizes : [])
@@ -875,7 +887,25 @@
       }
       title.textContent = A.myCustomer.name;
       const sizes = A.state.settings.sizes;
-      const orders = myOrders();
+      const all = myOrders();
+      const hidden = getHidden();
+      const isFinished = (o) => o.status === "delivered" || o.status === "cancelled";
+      const visible = showCleared ? all : all.filter((o) => !hidden.has(o.id));
+      const clearable = all.filter((o) => isFinished(o) && !hidden.has(o.id));
+      const hiddenCount = all.filter((o) => hidden.has(o.id)).length;
+
+      const ordersBody =
+        all.length === 0 ? "<p class='muted'>No orders yet.</p>" :
+        visible.length === 0 ? "<p class='muted'>All finished orders cleared.</p>" :
+        visible.map((o) => {
+          const cancel = o.status === "requested"
+            ? ` <button class="link" data-cancelmine="${o.id}">Cancel</button>` : "";
+          return `<div class="row" style="justify-content:space-between">` +
+            `<div><div>${A.esc(KO.orderItemsSummary(o, sizes, A.flavourName))}</div>` +
+            `<div class="muted">${KO.orderStatusLabel(o.status)}${o.preferredDate ? " · " + A.esc(o.preferredDate) : ""}</div></div>` +
+            `<div>${cancel}</div></div>`;
+        }).join("");
+
       body.innerHTML =
         `<div class="card"><h3>New order</h3>` +
           `<div id="orderItems">${itemRowHtml()}</div>` +
@@ -884,16 +914,13 @@
           `<label>Note (optional)</label><textarea id="orderNote" rows="2"></textarea>` +
           `<p id="orderErr" class="muted"></p>` +
           `<button class="primary" id="sendOrder">Send order</button></div>` +
-        `<div class="card"><h3>Your orders</h3>` +
-          (orders.length === 0 ? "<p class='muted'>No orders yet.</p>" :
-            orders.map((o) => {
-              const cancel = o.status === "requested"
-                ? ` <button class="link" data-cancelmine="${o.id}">Cancel</button>` : "";
-              return `<div class="row" style="justify-content:space-between">` +
-                `<div><div>${A.esc(KO.orderItemsSummary(o, sizes, A.flavourName))}</div>` +
-                `<div class="muted">${KO.orderStatusLabel(o.status)}${o.preferredDate ? " · " + A.esc(o.preferredDate) : ""}</div></div>` +
-                `<div>${cancel}</div></div>`;
-            }).join("")) +
+        `<div class="card">` +
+          `<div class="row" style="justify-content:space-between;align-items:center">` +
+            `<h3 style="margin:0">Your orders</h3>` +
+            (clearable.length ? `<button class="link" id="clearFinished">Clear finished</button>` : "") +
+          `</div>` +
+          ordersBody +
+          (hiddenCount ? `<p class="muted" style="margin-top:8px"><button class="link" id="toggleCleared">${showCleared ? "Hide cleared orders" : "Show cleared orders (" + hiddenCount + ")"}</button></p>` : "") +
         `</div>`;
 
       const itemsDiv = body.querySelector("#orderItems");
@@ -911,6 +938,18 @@
         b.addEventListener("click", async () => {
           if (confirm("Cancel this order?")) await A.cancelOrder(b.dataset.cancelmine);
         }));
+      const clearBtn = body.querySelector("#clearFinished");
+      if (clearBtn) clearBtn.addEventListener("click", () => {
+        const hidden = getHidden();
+        myOrders().forEach((o) => {
+          if (o.status === "delivered" || o.status === "cancelled") hidden.add(o.id);
+        });
+        saveHidden(hidden);
+        showCleared = false;
+        render();
+      });
+      const toggleBtn = body.querySelector("#toggleCleared");
+      if (toggleBtn) toggleBtn.addEventListener("click", () => { showCleared = !showCleared; render(); });
     }
 
     async function onSend() {

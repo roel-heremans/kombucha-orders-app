@@ -16,11 +16,14 @@ optional and off until configured. It uses EmailJS (client-side, free tier).
    > Preferred date: {{preferred_date}}
    > Note: {{note}}
    > Placed: {{placed_at}}
-4. **Account → General/API** → copy your **Public Key**.
+4. **Account → General** → copy your **Public Key**.
 5. In `index.html`, fill in `EMAILJS_CONFIG` with the Service ID, Template ID,
    and Public Key. Commit and push.
-6. **Account → Security** → turn on the allow-list and add your site origin
-   `https://roel-heremans.github.io` so the public key can't be used elsewhere.
+6. **Important — Account → Security**: turn on the origin allow-list and add
+   your site origin `https://roel-heremans.github.io`. This is the key abuse
+   control — without it, anyone who finds the public key (it's visible in the
+   page source) can use it to send emails through your account from any
+   origin, not just your site.
 
 Notes:
 - The order always saves and appears in the admin Orders tab even if the email

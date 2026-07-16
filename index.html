@@ -1194,6 +1194,7 @@
       if (btn) btn.disabled = true;
       const preferredDate = body.querySelector("#orderDate").value || "";
       const note = body.querySelector("#orderNote").value.trim();
+      let saved = false;
       try {
         await A.addOrder({
           customerId: A.myCustomer.id,
@@ -1202,20 +1203,25 @@
           status: "requested",
           createdAt: A.serverTimestamp(),
         });
+        saved = true;
         const msg = document.getElementById("orderErr");
         if (msg) msg.textContent = "Order sent ✓";
-        A.notifyNewOrder(KO.orderEmailParams(
-          { items, preferredDate, note },
-          A.myCustomer.name,
-          A.state.settings.sizes,
-          A.flavourName,
-          new Date().toLocaleString()
-        ));
       } catch (ex) {
         const msg = document.getElementById("orderErr");
         if (msg) msg.textContent = "Send failed: " + ex.message;
         const b2 = document.getElementById("sendOrder");
         if (b2) b2.disabled = false;
+      }
+      if (saved) {
+        try {
+          A.notifyNewOrder(KO.orderEmailParams(
+            { items, preferredDate, note },
+            A.myCustomer.name,
+            A.state.settings.sizes,
+            A.flavourName,
+            new Date().toLocaleString()
+          ));
+        } catch (e) { console.warn("order email skipped:", e); }
       }
     }
 

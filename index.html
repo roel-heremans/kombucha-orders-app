@@ -759,6 +759,42 @@
       return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
     }
 
+    const MAX_PDF = 700 * 1024;
+
+    function fileToBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const s = String(reader.result);
+          const comma = s.indexOf(",");
+          resolve(comma >= 0 ? s.slice(comma + 1) : s);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function uploaderHtml(custId, mk, cust) {
+      const uploads = A.state.recibos
+        .filter((r) => r.customerId === custId)
+        .slice().sort((a, b) => (a.monthKey < b.monthKey ? 1 : -1));
+      const linked = cust && cust.uid;
+      const listHtml = uploads.length
+        ? uploads.map((r) =>
+            `<div class="row" style="justify-content:space-between">` +
+            `<div>${A.esc(KO.windowLabel(r.monthKey, r.monthKey))} — ${A.esc(r.fileName)}</div>` +
+            `<button class="link" data-delrec="${r.id}">Delete</button></div>`).join("")
+        : "<p class='muted'>No RV PDFs uploaded for this customer.</p>";
+      return `<div class="card"><h4>Upload RV PDF</h4>` +
+        (linked
+          ? `<p class="muted">For ${A.esc(cust.name)} · ${A.esc(KO.windowLabel(mk, mk))} (replaces any existing PDF for that month).</p>` +
+            `<input id="ruFile" type="file" accept="application/pdf"/>` +
+            `<button class="primary" id="ruUpload">Upload PDF</button>`
+          : `<p class="muted">This customer has no app login yet — create one in Settings → Restaurant logins before uploading their recibos.</p>`) +
+        `<p id="ruMsg" class="muted"></p>` +
+        `<h4 style="margin-top:12px">Uploaded recibos</h4>${listHtml}</div>`;
+    }
+
     function render() {
       if (!A.state.settings) { container.innerHTML = "<p class='muted'>Loading…</p>"; return; }
       const custId = A.current.reciboCust || "";
@@ -778,9 +814,11 @@
         `<label>Customer</label><select id="rcust">${custOpts}</select>` +
         `<label>Month</label><input id="rmonth" type="month" value="${mk}"/>` +
         `</div>` +
-        (custId ? `<div class="card"><pre id="rtext">${A.esc(text)}</pre>` +
-          `<button class="primary" id="copyBtn">Copy to clipboard</button>` +
-          `<p id="copyMsg" class="muted"></p></div>`
+        (custId
+          ? `<div class="card"><pre id="rtext">${A.esc(text)}</pre>` +
+              `<button class="primary" id="copyBtn">Copy to clipboard</button>` +
+              `<p id="copyMsg" class="muted"></p></div>` +
+              uploaderHtml(custId, mk, A.state.customers.find((c) => c.id === custId))
           : `<p class="muted">Choose a customer to generate the recibo text.</p>`);
 
       container.querySelector("#rcust").addEventListener("change", (e) => { A.current.reciboCust = e.target.value; render(); });
@@ -790,6 +828,33 @@
         try { await navigator.clipboard.writeText(text); container.querySelector("#copyMsg").textContent = "Copied ✓"; }
         catch (e) { container.querySelector("#copyMsg").textContent = "Copy failed — select the text manually."; }
       });
+
+      const ruUpload = container.querySelector("#ruUpload");
+      if (ruUpload) ruUpload.addEventListener("click", async () => {
+        const fileInput = container.querySelector("#ruFile");
+        const file = fileInput && fileInput.files && fileInput.files[0];
+        const setMsg = (t) => { const m = container.querySelector("#ruMsg"); if (m) m.textContent = t; };
+        if (!file) { setMsg("Choose a PDF file first."); return; }
+        const isPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name);
+        if (!isPdf) { setMsg("Only PDF files are allowed."); return; }
+        if (file.size > MAX_PDF) { setMsg("PDF too large (max 700 KB). Please shrink it and try again."); return; }
+        const cust = A.state.customers.find((c) => c.id === custId);
+        if (!cust || !cust.uid) { setMsg("This customer has no app login yet."); return; }
+        ruUpload.disabled = true; setMsg("Uploading…");
+        try {
+          const base64 = await fileToBase64(file);
+          await A.uploadRecibo(custId, cust.uid, mk, file.name, file.size, base64, A.user ? A.user.email : "");
+          const m = container.querySelector("#ruMsg"); if (m) m.textContent = "Uploaded ✓";
+        } catch (ex) {
+          const m = container.querySelector("#ruMsg"); if (m) m.textContent = "Upload failed: " + (ex.code || ex.message);
+          const b = container.querySelector("#ruUpload"); if (b) b.disabled = false;
+        }
+      });
+
+      container.querySelectorAll("[data-delrec]").forEach((b) =>
+        b.addEventListener("click", async () => {
+          if (confirm("Delete this recibo PDF?")) await A.deleteRecibo(b.dataset.delrec);
+        }));
     }
 
     A.renderers.recibo = render;

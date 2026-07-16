@@ -867,6 +867,7 @@
 
     async function onSend() {
       const err = body.querySelector("#orderErr");
+      const btn = body.querySelector("#sendOrder");
       const items = [];
       body.querySelectorAll(".order-item").forEach((r) => {
         const sizeId = r.querySelector(".oi-size").value;
@@ -875,6 +876,7 @@
         if (sizeId && flavourId && quantity > 0) items.push({ sizeId, flavourId, quantity });
       });
       if (items.length === 0) { err.textContent = "Add at least one bottle line with a flavour."; return; }
+      if (btn) btn.disabled = true;
       try {
         await A.addOrder({
           customerId: A.myCustomer.id,
@@ -885,8 +887,14 @@
           status: "requested",
           createdAt: A.serverTimestamp(),
         });
-        err.textContent = "Order sent ✓";
-      } catch (ex) { err.textContent = "Send failed: " + ex.message; }
+        const msg = document.getElementById("orderErr");
+        if (msg) msg.textContent = "Order sent ✓";
+      } catch (ex) {
+        const msg = document.getElementById("orderErr");
+        if (msg) msg.textContent = "Send failed: " + ex.message;
+        const b2 = document.getElementById("sendOrder");
+        if (b2) b2.disabled = false;
+      }
     }
 
     A.renderRestaurant = render;

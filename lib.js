@@ -30,11 +30,55 @@
   const MONTH_NAMES = ["January","February","March","April","May","June",
     "July","August","September","October","November","December"];
 
+  const PT_MONTH_NAMES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho",
+    "Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+
+  const STRINGS = {
+    en: {
+      log_out: "Log out", new_order: "New order", size: "Size", flavour: "Flavour",
+      qty: "Qty", choose_flavour: "— choose flavour —", add_line: "➕ Add line",
+      preferred_date: "Preferred date (optional)", note: "Note (optional)",
+      send_order: "Send order", need_line: "Add at least one bottle line with a flavour.",
+      order_sent: "Order sent ✓", send_failed: "Send failed:", your_orders: "Your orders",
+      clear_finished: "Clear finished", no_orders: "No orders yet.",
+      all_cleared: "All finished orders cleared.", cancel: "Cancel",
+      confirm_cancel: "Cancel this order?", show_cleared: "Show cleared orders",
+      hide_cleared: "Hide cleared orders", my_recibos: "My Recibos",
+      download_print: "Download / Print", no_recibos: "No recibos yet.",
+      recibo_unavailable: "That recibo is no longer available.",
+      recibo_open_failed: "Could not open the recibo:",
+      not_linked: "Your account isn't linked to a customer yet. Please contact us.",
+      loading: "Loading…", status_requested: "Requested", status_delivered: "Delivered",
+      status_cancelled: "Cancelled",
+    },
+    pt: {
+      log_out: "Sair", new_order: "Novo pedido", size: "Tamanho", flavour: "Sabor",
+      qty: "Qtd", choose_flavour: "— escolher sabor —", add_line: "➕ Adicionar linha",
+      preferred_date: "Data preferida (opcional)", note: "Nota (opcional)",
+      send_order: "Enviar pedido", need_line: "Adicione pelo menos uma linha com um sabor.",
+      order_sent: "Pedido enviado ✓", send_failed: "Falha no envio:", your_orders: "Os seus pedidos",
+      clear_finished: "Limpar concluídos", no_orders: "Ainda não há pedidos.",
+      all_cleared: "Todos os pedidos concluídos foram limpos.", cancel: "Cancelar",
+      confirm_cancel: "Cancelar este pedido?", show_cleared: "Mostrar pedidos limpos",
+      hide_cleared: "Ocultar pedidos limpos", my_recibos: "Os meus Recibos",
+      download_print: "Descarregar / Imprimir", no_recibos: "Ainda não há recibos.",
+      recibo_unavailable: "Esse recibo já não está disponível.",
+      recibo_open_failed: "Não foi possível abrir o recibo:",
+      not_linked: "A sua conta ainda não está associada a um cliente. Contacte-nos, por favor.",
+      loading: "A carregar…", status_requested: "Solicitado", status_delivered: "Entregue",
+      status_cancelled: "Cancelado",
+    },
+  };
+
+  function t(lang, key) {
+    return (STRINGS[lang] || STRINGS.en)[key] || STRINGS.en[key] || key;
+  }
+
   function monthKey(dateStr) { return dateStr.slice(0, 7); }
 
   function inMonth(dateStr, mk) { return monthKey(dateStr) === mk; }
 
-  function monthName(mk) { return MONTH_NAMES[parseInt(mk.slice(5, 7), 10) - 1]; }
+  function monthName(mk, lang) { return (lang === "pt" ? PT_MONTH_NAMES : MONTH_NAMES)[parseInt(mk.slice(5, 7), 10) - 1]; }
 
   function dayOfMonth(dateStr) { return parseInt(dateStr.slice(8, 10), 10); }
 
@@ -112,8 +156,8 @@
       .sort(function (a, b) { return b.quantity - a.quantity; });
   }
 
-  function windowLabel(startMk, endMk) {
-    const abbr = function (mk) { return monthName(mk).slice(0, 3); };
+  function windowLabel(startMk, endMk, lang) {
+    const abbr = function (mk) { return monthName(mk, lang).slice(0, 3); };
     const year = function (mk) { return mk.slice(0, 4); };
     if (startMk === endMk) return abbr(startMk) + " " + year(startMk);
     if (year(startMk) === year(endMk)) return abbr(startMk) + "–" + abbr(endMk) + " " + year(endMk);
@@ -337,10 +381,10 @@
     };
   }
 
-  function orderStatusLabel(status) {
-    if (status === "delivered") return "✅ Delivered";
-    if (status === "cancelled") return "✖ Cancelled";
-    return "⏳ Requested";
+  function orderStatusLabel(status, lang) {
+    if (status === "delivered") return "✅ " + t(lang, "status_delivered");
+    if (status === "cancelled") return "✖ " + t(lang, "status_cancelled");
+    return "⏳ " + t(lang, "status_requested");
   }
 
   function escapeXml(s) {
@@ -464,5 +508,5 @@
     });
   }
 
-  return { formatMoney, sizeById, deliveryRevenue, deliveryDepositRefund, monthKey, inMonth, monthName, dayOfMonth, recentMonthKeys, resolveWindow, monthKeysBetween, inWindow, revenueInWindow, revenueByCustomerInWindow, flavourCountsInWindow, windowLabel, monthlyRevenue, revenueByCustomer, monthlyRevenueSeries, flavourCounts, revenueByCustomerType, outstandingByCustomer, reciboSizeLabel, reciboDocId, nextBatchNumber, formatBatchNumber, bottles1LForConversion, sizeLiters, soldLitersInWindow, productionSummary, generateRecibo, orderItemsSummary, orderEmailParams, orderStatusLabel, barChartSVG, stackedBarChartSVG, revenueByTypeInWindow, revenueTypeSeries, revenueTypeByYear };
+  return { formatMoney, sizeById, deliveryRevenue, deliveryDepositRefund, monthKey, inMonth, monthName, dayOfMonth, recentMonthKeys, resolveWindow, monthKeysBetween, inWindow, revenueInWindow, revenueByCustomerInWindow, flavourCountsInWindow, windowLabel, monthlyRevenue, revenueByCustomer, monthlyRevenueSeries, flavourCounts, revenueByCustomerType, outstandingByCustomer, reciboSizeLabel, reciboDocId, nextBatchNumber, formatBatchNumber, bottles1LForConversion, sizeLiters, soldLitersInWindow, productionSummary, generateRecibo, orderItemsSummary, orderEmailParams, orderStatusLabel, barChartSVG, stackedBarChartSVG, revenueByTypeInWindow, revenueTypeSeries, revenueTypeByYear, t };
 });

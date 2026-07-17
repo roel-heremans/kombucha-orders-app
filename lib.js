@@ -206,6 +206,53 @@
     return customerId + "_" + monthKey;
   }
 
+  function nextBatchNumber(batches) {
+    return (batches || []).reduce(function (m, b) {
+      return Math.max(m, b && typeof b.number === "number" ? b.number : 0);
+    }, 0) + 1;
+  }
+
+  function formatBatchNumber(n) {
+    return "Batch " + String(n).padStart(3, "0");
+  }
+
+  function bottles1LForConversion(count270) {
+    return Math.ceil((count270 || 0) * 270 / 1000);
+  }
+
+  function sizeLiters(size) {
+    if (size && typeof size.liters === "number") return size.liters;
+    const m = /([\d.]+)\s*(ml|l)\b/i.exec(size && size.label ? size.label : "");
+    if (!m) return 0;
+    const n = parseFloat(m[1]);
+    return /ml/i.test(m[2]) ? n / 1000 : n;
+  }
+
+  function soldLitersInWindow(deliveries, sizes, startMk, endMk) {
+    return (deliveries || []).reduce(function (sum, d) {
+      if (!inWindow(d.date, startMk, endMk)) return sum;
+      return sum + (d.items || []).reduce(function (s, it) {
+        return s + sizeLiters(sizeById(sizes, it.sizeId)) * (it.quantity || 0);
+      }, 0);
+    }, 0);
+  }
+
+  function productionSummary(batches, startMk, endMk) {
+    let bottled1L = 0, made270 = 0, used1L = 0;
+    (batches || []).forEach(function (b) {
+      if (b && b.step4 && b.step4.date && inWindow(b.step4.date, startMk, endMk)) {
+        bottled1L += b.step4.bottles1L || 0;
+      }
+      ((b && b.conversions) || []).forEach(function (c) {
+        if (c && c.date && inWindow(c.date, startMk, endMk)) {
+          made270 += c.count270 || 0;
+          used1L += c.used1L || 0;
+        }
+      });
+    });
+    return { bottled1L: bottled1L, made270: made270, used1L: used1L };
+  }
+
   function generateRecibo(deliveries, customerId, mk, sizes, header, nif) {
     const headerLines = [header];
     if (nif && String(nif).trim()) headerLines.push("NIF: " + String(nif).trim());
@@ -417,5 +464,5 @@
     });
   }
 
-  return { formatMoney, sizeById, deliveryRevenue, deliveryDepositRefund, monthKey, inMonth, monthName, dayOfMonth, recentMonthKeys, resolveWindow, monthKeysBetween, inWindow, revenueInWindow, revenueByCustomerInWindow, flavourCountsInWindow, windowLabel, monthlyRevenue, revenueByCustomer, monthlyRevenueSeries, flavourCounts, revenueByCustomerType, outstandingByCustomer, reciboSizeLabel, reciboDocId, generateRecibo, orderItemsSummary, orderEmailParams, orderStatusLabel, barChartSVG, stackedBarChartSVG, revenueByTypeInWindow, revenueTypeSeries, revenueTypeByYear };
+  return { formatMoney, sizeById, deliveryRevenue, deliveryDepositRefund, monthKey, inMonth, monthName, dayOfMonth, recentMonthKeys, resolveWindow, monthKeysBetween, inWindow, revenueInWindow, revenueByCustomerInWindow, flavourCountsInWindow, windowLabel, monthlyRevenue, revenueByCustomer, monthlyRevenueSeries, flavourCounts, revenueByCustomerType, outstandingByCustomer, reciboSizeLabel, reciboDocId, nextBatchNumber, formatBatchNumber, bottles1LForConversion, sizeLiters, soldLitersInWindow, productionSummary, generateRecibo, orderItemsSummary, orderEmailParams, orderStatusLabel, barChartSVG, stackedBarChartSVG, revenueByTypeInWindow, revenueTypeSeries, revenueTypeByYear };
 });

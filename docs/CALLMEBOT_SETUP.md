@@ -18,6 +18,12 @@ Then configure the app:
 
 Notes:
 - Free and rate-limited (a few messages/min) — ample here.
+- **Privacy:** the new-order alert is sent from the *restaurant's* browser, so the
+  configured phone numbers **and** API keys are visible in the page source to any
+  restaurant that logs in. Use numbers you're comfortable sharing with your
+  restaurant customers (they likely already have them), or set up a dedicated
+  WhatsApp number for this. The delivered alert is sent from your own (admin)
+  browser and adds no exposure.
 - The API keys sit in the client (like the EmailJS key); worst case someone
   could ping your WhatsApp — rotate the key via CallMeBot if needed.
 - Blank a recipient's `phone` or `apikey` to disable them; empty all to turn the

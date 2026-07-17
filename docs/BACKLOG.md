@@ -22,6 +22,11 @@ Status legend: 🟡 next · ⚪ planned · 💡 idea / deferred · ✅ done
 
 ## Done ✅
 
+- **Production / fermentation tracking**: admin-only Production tab logging
+  batches (Batch 001…) through 4 steps + 270 ml conversions (1 L-used auto-fills
+  ceil), with a windowed summary of 1 L bottled, 270 ml made, 1 L used, sold
+  liters, and family consumption (produced − sold). New admin-only `batches`
+  collection + rules.
 - **New-order email notifications**: best-effort EmailJS email to Roel + Nina
   when a restaurant places an order (client-side, no backend; order always saves
   regardless). Configured + verified live. Setup in `docs/EMAILJS_SETUP.md`.

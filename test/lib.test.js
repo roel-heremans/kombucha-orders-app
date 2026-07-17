@@ -450,3 +450,28 @@ test("productionSummary windows bottling by step4.date and conversions by their 
   assert.deepStrictEqual(KO.productionSummary([], "2026-06", "2026-06"),
     { bottled1L: 0, made270: 0, used1L: 0 });
 });
+
+test("t returns the language string, falling back to English then the key", () => {
+  assert.strictEqual(KO.t("en", "send_order"), "Send order");
+  assert.strictEqual(KO.t("pt", "send_order"), "Enviar pedido");
+  assert.strictEqual(KO.t("de", "send_order"), "Send order");   // unknown lang -> en
+  assert.strictEqual(KO.t(undefined, "your_orders"), "Your orders");
+  assert.strictEqual(KO.t("pt", "no_such_key"), "no_such_key"); // unknown key -> key
+});
+
+test("orderStatusLabel keeps English by default and translates with lang", () => {
+  assert.strictEqual(KO.orderStatusLabel("requested"), "⏳ Requested");
+  assert.strictEqual(KO.orderStatusLabel("delivered"), "✅ Delivered");
+  assert.strictEqual(KO.orderStatusLabel("cancelled"), "✖ Cancelled");
+  assert.strictEqual(KO.orderStatusLabel("requested", "pt"), "⏳ Solicitado");
+  assert.strictEqual(KO.orderStatusLabel("delivered", "pt"), "✅ Entregue");
+  assert.strictEqual(KO.orderStatusLabel("cancelled", "pt"), "✖ Cancelado");
+});
+
+test("monthName and windowLabel support Portuguese, English by default", () => {
+  assert.strictEqual(KO.monthName("2026-07"), "July");
+  assert.strictEqual(KO.monthName("2026-07", "pt"), "Julho");
+  assert.strictEqual(KO.monthName("2026-03", "pt"), "Março");
+  assert.strictEqual(KO.windowLabel("2026-07", "2026-07"), "Jul 2026");
+  assert.strictEqual(KO.windowLabel("2026-03", "2026-03", "pt"), "Mar 2026");
+});

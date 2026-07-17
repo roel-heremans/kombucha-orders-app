@@ -547,3 +547,16 @@ test("sumConsumption folds periods per size", () => {
   const periods = KO.consumptionPeriods(STOCKTAKES, BATCHES, PROD_DELIVS);
   assert.deepStrictEqual(KO.sumConsumption(periods), { "1L": 21, "270ml": 2 });
 });
+
+test("date-range boundaries: event on afterDate excluded, on throughDate included", () => {
+  const b = [
+    { number: 9, step4: { bottles1L: 10, date: "2026-06-01" } },  // == afterDate → excluded
+    { number: 10, step4: { bottles1L: 7, date: "2026-07-01" } },  // == throughDate → included
+  ];
+  assert.deepStrictEqual(KO.producedPerSize(b, "2026-06-01", "2026-07-01"), { "1L": 7, "270ml": 0 });
+  const dv = [
+    { date: "2026-06-01", items: [{ sizeId: "1L", flavourId: "a", quantity: 4 }] }, // excluded
+    { date: "2026-07-01", items: [{ sizeId: "1L", flavourId: "a", quantity: 3 }] }, // included
+  ];
+  assert.deepStrictEqual(KO.deliveredPerSize(dv, "2026-06-01", "2026-07-01"), { "1L": 3 });
+});

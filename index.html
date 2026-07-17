@@ -1187,7 +1187,10 @@
     const A = window.APP, KO = window.KO;
     const body = document.getElementById("restaurantBody");
     const title = document.getElementById("restaurantTitle");
-    let showCleared = false; // session-only: reveal locally-hidden finished orders
+    let showCleared = false;
+
+    function currentLang() { try { return localStorage.getItem("ko_lang") || "pt"; } catch (e) { return "pt"; } }
+    const T = (k) => KO.t(currentLang(), k);
 
     function base64ToBlob(b64, type) {
       const bin = atob(b64);
@@ -1202,8 +1205,6 @@
         .slice().sort((a, b) => (a.monthKey < b.monthKey ? 1 : -1));
     }
 
-    // "Cleared" finished orders are hidden from this device only (localStorage);
-    // nothing is deleted and admins still see every order.
     function hiddenKey() { return "ko_hidden_orders_" + (A.user ? A.user.uid : ""); }
     function getHidden() {
       try { return new Set(JSON.parse(localStorage.getItem(hiddenKey()) || "[]")); }
@@ -1218,16 +1219,21 @@
         .map((s) => `<option value="${s.id}">${A.esc(s.label)}</option>`).join("");
     }
     function flavourOptions() {
-      return `<option value="">— choose flavour —</option>` +
+      return `<option value="">${T("choose_flavour")}</option>` +
         A.state.flavours.slice().sort((a, b) => a.name.localeCompare(b.name))
           .map((f) => `<option value="${f.id}">${A.esc(f.name)}</option>`).join("");
     }
     function itemRowHtml() {
       return `<div class="row order-item">` +
-        `<div><label>Size</label><select class="oi-size">${sizeOptions()}</select></div>` +
-        `<div><label>Flavour</label><select class="oi-flav">${flavourOptions()}</select></div>` +
-        `<div style="flex:0 0 64px"><label>Qty</label><input class="oi-qty" type="number" min="1" value="1"/></div>` +
+        `<div><label>${T("size")}</label><select class="oi-size">${sizeOptions()}</select></div>` +
+        `<div><label>${T("flavour")}</label><select class="oi-flav">${flavourOptions()}</select></div>` +
+        `<div style="flex:0 0 64px"><label>${T("qty")}</label><input class="oi-qty" type="number" min="1" value="1"/></div>` +
         `<button class="link oi-del" style="flex:0 0 32px">✕</button></div>`;
+    }
+
+    function langToggleHtml(lang) {
+      const b = (code, lbl) => `<button class="link lang-btn" data-lang="${code}" style="${lang === code ? "font-weight:700;text-decoration:underline" : ""}">${lbl}</button>`;
+      return `<div class="row" style="justify-content:flex-end;gap:6px;align-items:center">${b("en", "EN")}<span class="muted">|</span>${b("pt", "PT")}</div>`;
     }
 
     function myOrders() {
@@ -1241,9 +1247,15 @@
 
     function render() {
       if (A.role !== "restaurant") return;
-      if (!A.state.settings) { body.innerHTML = "<p class='muted'>Loading…</p>"; return; }
+      const lang = currentLang();
+      const logoutBtn = document.getElementById("restaurantLogout");
+      if (logoutBtn) logoutBtn.textContent = T("log_out");
+      if (!A.state.settings) { body.innerHTML = `<p class='muted'>${T("loading")}</p>`; return; }
       if (!A.myCustomer) {
-        body.innerHTML = "<div class='card'><p>Your account isn't linked to a customer yet. Please contact us.</p></div>";
+        body.innerHTML = langToggleHtml(lang) + `<div class='card'><p>${T("not_linked")}</p></div>`;
+        body.querySelectorAll(".lang-btn").forEach((b) => b.addEventListener("click", () => {
+          try { localStorage.setItem("ko_lang", b.dataset.lang); } catch (e) {} render();
+        }));
         return;
       }
       title.textContent = A.myCustomer.name;
@@ -1256,41 +1268,46 @@
       const hiddenCount = all.filter((o) => hidden.has(o.id)).length;
 
       const ordersBody =
-        all.length === 0 ? "<p class='muted'>No orders yet.</p>" :
-        visible.length === 0 ? "<p class='muted'>All finished orders cleared.</p>" :
+        all.length === 0 ? `<p class='muted'>${T("no_orders")}</p>` :
+        visible.length === 0 ? `<p class='muted'>${T("all_cleared")}</p>` :
         visible.map((o) => {
           const cancel = o.status === "requested"
-            ? ` <button class="link" data-cancelmine="${o.id}">Cancel</button>` : "";
+            ? ` <button class="link" data-cancelmine="${o.id}">${T("cancel")}</button>` : "";
           return `<div class="row" style="justify-content:space-between">` +
             `<div><div>${A.esc(KO.orderItemsSummary(o, sizes, A.flavourName))}</div>` +
-            `<div class="muted">${KO.orderStatusLabel(o.status)}${o.preferredDate ? " · " + A.esc(o.preferredDate) : ""}</div></div>` +
+            `<div class="muted">${KO.orderStatusLabel(o.status, lang)}${o.preferredDate ? " · " + A.esc(o.preferredDate) : ""}</div></div>` +
             `<div>${cancel}</div></div>`;
         }).join("");
 
       body.innerHTML =
-        `<div class="card"><h3>New order</h3>` +
+        langToggleHtml(lang) +
+        `<div class="card"><h3>${T("new_order")}</h3>` +
           `<div id="orderItems">${itemRowHtml()}</div>` +
-          `<button class="link" id="addOrderLine">➕ Add line</button>` +
-          `<label>Preferred date (optional)</label><input id="orderDate" type="date"/>` +
-          `<label>Note (optional)</label><textarea id="orderNote" rows="2"></textarea>` +
+          `<button class="link" id="addOrderLine">${T("add_line")}</button>` +
+          `<label>${T("preferred_date")}</label><input id="orderDate" type="date"/>` +
+          `<label>${T("note")}</label><textarea id="orderNote" rows="2"></textarea>` +
           `<p id="orderErr" class="muted"></p>` +
-          `<button class="primary" id="sendOrder">Send order</button></div>` +
+          `<button class="primary" id="sendOrder">${T("send_order")}</button></div>` +
         `<div class="card">` +
           `<div class="row" style="justify-content:space-between;align-items:center">` +
-            `<h3 style="margin:0">Your orders</h3>` +
-            (clearable.length ? `<button class="link" id="clearFinished">Clear finished</button>` : "") +
+            `<h3 style="margin:0">${T("your_orders")}</h3>` +
+            (clearable.length ? `<button class="link" id="clearFinished">${T("clear_finished")}</button>` : "") +
           `</div>` +
           ordersBody +
-          (hiddenCount ? `<p class="muted" style="margin-top:8px"><button class="link" id="toggleCleared">${showCleared ? "Hide cleared orders" : "Show cleared orders (" + hiddenCount + ")"}</button></p>` : "") +
+          (hiddenCount ? `<p class="muted" style="margin-top:8px"><button class="link" id="toggleCleared">${showCleared ? T("hide_cleared") : T("show_cleared") + " (" + hiddenCount + ")"}</button></p>` : "") +
         `</div>` +
-        `<div class="card"><h3>My Recibos</h3>` +
+        `<div class="card"><h3>${T("my_recibos")}</h3>` +
           (myRecibos().length
             ? myRecibos().map((r) =>
                 `<div class="row" style="justify-content:space-between">` +
-                `<div>${A.esc(KO.windowLabel(r.monthKey, r.monthKey))}<div class="muted">${A.esc(r.fileName)}</div></div>` +
-                `<button class="link" data-getrec="${r.id}">Download / Print</button></div>`).join("")
-            : "<p class='muted'>No recibos yet.</p>") +
+                `<div>${A.esc(KO.windowLabel(r.monthKey, r.monthKey, lang))}<div class="muted">${A.esc(r.fileName)}</div></div>` +
+                `<button class="link" data-getrec="${r.id}">${T("download_print")}</button></div>`).join("")
+            : `<p class='muted'>${T("no_recibos")}</p>`) +
           `<p id="recMsg" class="muted"></p></div>`;
+
+      body.querySelectorAll(".lang-btn").forEach((b) => b.addEventListener("click", () => {
+        try { localStorage.setItem("ko_lang", b.dataset.lang); } catch (e) {} render();
+      }));
 
       const itemsDiv = body.querySelector("#orderItems");
       body.querySelector("#addOrderLine").addEventListener("click", (e) => {
@@ -1305,14 +1322,12 @@
       body.querySelector("#sendOrder").addEventListener("click", onSend);
       body.querySelectorAll("[data-cancelmine]").forEach((b) =>
         b.addEventListener("click", async () => {
-          if (confirm("Cancel this order?")) await A.cancelOrder(b.dataset.cancelmine);
+          if (confirm(T("confirm_cancel"))) await A.cancelOrder(b.dataset.cancelmine);
         }));
       const clearBtn = body.querySelector("#clearFinished");
       if (clearBtn) clearBtn.addEventListener("click", () => {
         const hidden = getHidden();
-        myOrders().forEach((o) => {
-          if (o.status === "delivered" || o.status === "cancelled") hidden.add(o.id);
-        });
+        myOrders().forEach((o) => { if (o.status === "delivered" || o.status === "cancelled") hidden.add(o.id); });
         saveHidden(hidden);
         showCleared = false;
         render();
@@ -1322,18 +1337,18 @@
 
       body.querySelectorAll("[data-getrec]").forEach((b) =>
         b.addEventListener("click", async () => {
-          const win = window.open("", "_blank"); // opened within the user gesture (avoids popup block)
+          const win = window.open("", "_blank");
           const setMsg = (t) => { const m = body.querySelector("#recMsg"); if (m) m.textContent = t; };
           try {
             const snap = await A.fetchReciboFile(b.dataset.getrec);
-            if (!snap.exists()) { if (win) win.close(); setMsg("That recibo is no longer available."); return; }
+            if (!snap.exists()) { if (win) win.close(); setMsg(T("recibo_unavailable")); return; }
             const d = snap.data();
             const url = URL.createObjectURL(base64ToBlob(d.data, d.contentType));
             if (win) win.location.href = url; else window.location.href = url;
             setTimeout(() => URL.revokeObjectURL(url), 60000);
           } catch (ex) {
             if (win) win.close();
-            setMsg("Could not open the recibo: " + (ex.code || ex.message));
+            setMsg(T("recibo_open_failed") + " " + (ex.code || ex.message));
           }
         }));
     }
@@ -1348,36 +1363,30 @@
         const quantity = parseInt(r.querySelector(".oi-qty").value, 10) || 0;
         if (sizeId && flavourId && quantity > 0) items.push({ sizeId, flavourId, quantity });
       });
-      if (items.length === 0) { err.textContent = "Add at least one bottle line with a flavour."; return; }
+      if (items.length === 0) { err.textContent = T("need_line"); return; }
       if (btn) btn.disabled = true;
       const preferredDate = body.querySelector("#orderDate").value || "";
       const note = body.querySelector("#orderNote").value.trim();
       let saved = false;
       try {
         await A.addOrder({
-          customerId: A.myCustomer.id,
-          customerUid: A.user.uid,
-          items, preferredDate, note,
-          status: "requested",
-          createdAt: A.serverTimestamp(),
+          customerId: A.myCustomer.id, customerUid: A.user.uid,
+          items, preferredDate, note, status: "requested", createdAt: A.serverTimestamp(),
         });
         saved = true;
         const msg = document.getElementById("orderErr");
-        if (msg) msg.textContent = "Order sent ✓";
+        if (msg) msg.textContent = T("order_sent");
       } catch (ex) {
         const msg = document.getElementById("orderErr");
-        if (msg) msg.textContent = "Send failed: " + ex.message;
+        if (msg) msg.textContent = T("send_failed") + " " + ex.message;
         const b2 = document.getElementById("sendOrder");
         if (b2) b2.disabled = false;
       }
       if (saved) {
         try {
           A.notifyNewOrder(KO.orderEmailParams(
-            { items, preferredDate, note },
-            A.myCustomer.name,
-            A.state.settings.sizes,
-            A.flavourName,
-            new Date().toLocaleString()
+            { items, preferredDate, note }, A.myCustomer.name,
+            A.state.settings.sizes, A.flavourName, new Date().toLocaleString()
           ));
         } catch (e) { console.warn("order email skipped:", e); }
       }

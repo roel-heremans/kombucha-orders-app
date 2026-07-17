@@ -397,3 +397,56 @@ test("orderEmailParams uses — for empty date/note and tolerates no placedAt", 
   assert.strictEqual(p.items, "");
   assert.strictEqual(p.placed_at, "");
 });
+
+const BATCHES = [
+  { number: 1, step4: { bottles1L: 60, date: "2026-06-14" },
+    conversions: [ { count270: 4, used1L: 2, date: "2026-06-18" } ] },
+  { number: 2, step4: { bottles1L: 40, date: "2026-07-02" },
+    conversions: [ { count270: 8, used1L: 3, date: "2026-07-10" },
+                   { count270: 4, used1L: 2, date: "2026-06-20" } ] },
+];
+
+test("nextBatchNumber handles empty, sequence, and gaps", () => {
+  assert.strictEqual(KO.nextBatchNumber([]), 1);
+  assert.strictEqual(KO.nextBatchNumber(BATCHES), 3);
+  assert.strictEqual(KO.nextBatchNumber([{ number: 5 }, { number: 2 }]), 6);
+});
+
+test("formatBatchNumber zero-pads to 3 and never truncates", () => {
+  assert.strictEqual(KO.formatBatchNumber(1), "Batch 001");
+  assert.strictEqual(KO.formatBatchNumber(23), "Batch 023");
+  assert.strictEqual(KO.formatBatchNumber(1000), "Batch 1000");
+});
+
+test("bottles1LForConversion is ceil of count*0.27", () => {
+  assert.strictEqual(KO.bottles1LForConversion(0), 0);
+  assert.strictEqual(KO.bottles1LForConversion(1), 1);
+  assert.strictEqual(KO.bottles1LForConversion(4), 2);
+  assert.strictEqual(KO.bottles1LForConversion(8), 3);
+  assert.strictEqual(KO.bottles1LForConversion(10), 3);
+});
+
+test("sizeLiters parses labels and honors an explicit liters field", () => {
+  assert.strictEqual(KO.sizeLiters({ label: "1 L" }), 1);
+  assert.strictEqual(KO.sizeLiters({ label: "1L" }), 1);
+  assert.strictEqual(KO.sizeLiters({ label: "1.5 L" }), 1.5);
+  assert.ok(Math.abs(KO.sizeLiters({ label: "270 ml" }) - 0.27) < 1e-9);
+  assert.ok(Math.abs(KO.sizeLiters({ label: "500 ml" }) - 0.5) < 1e-9);
+  assert.strictEqual(KO.sizeLiters({ label: "weird", liters: 0.33 }), 0.33);
+  assert.strictEqual(KO.sizeLiters({ label: "nope" }), 0);
+});
+
+test("soldLitersInWindow sums delivered volume across sizes", () => {
+  // June: 2x1L(2) + (2x1L+10x270ml)(2+2.7) + 4x270ml(1.08) = 7.78
+  assert.ok(Math.abs(KO.soldLitersInWindow(DELIVS, SIZES, "2026-06", "2026-06") - 7.78) < 1e-9);
+  assert.ok(Math.abs(KO.soldLitersInWindow(DELIVS, SIZES, "2026-07", "2026-07") - 1) < 1e-9);
+});
+
+test("productionSummary windows bottling by step4.date and conversions by their date", () => {
+  assert.deepStrictEqual(KO.productionSummary(BATCHES, "2026-06", "2026-06"),
+    { bottled1L: 60, made270: 8, used1L: 4 });
+  assert.deepStrictEqual(KO.productionSummary(BATCHES, "2026-07", "2026-07"),
+    { bottled1L: 40, made270: 8, used1L: 3 });
+  assert.deepStrictEqual(KO.productionSummary([], "2026-06", "2026-06"),
+    { bottled1L: 0, made270: 0, used1L: 0 });
+});

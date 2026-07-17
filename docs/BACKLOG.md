@@ -22,6 +22,11 @@ Status legend: 🟡 next · ⚪ planned · 💡 idea / deferred · ✅ done
 
 ## Done ✅
 
+- **Available-to-sell stock & consumption**: admin records dated per-size
+  stocktakes; the Production tab tracks sellable stock forward (production adds,
+  deliveries subtract) and derives private consumption by reconciling each new
+  stocktake against expected (per size + liters). Admin-only `stocktakes`
+  collection; replaces the old produced−sold estimate.
 - **Reorder prefill**: the restaurant New-order form pre-fills with the line
   items (size + flavour + quantity) of their most recent non-cancelled order,
   editable before sending. Tested `lastOrderItems` helper.

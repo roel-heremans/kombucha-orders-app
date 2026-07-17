@@ -60,5 +60,8 @@ service cloud.firestore {
     match /batches/{id} {
       allow read, write: if isAdmin();
     }
+    match /stocktakes/{id} {
+      allow read, write: if isAdmin();
+    }
   }
 }

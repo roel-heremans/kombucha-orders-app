@@ -560,3 +560,11 @@ test("date-range boundaries: event on afterDate excluded, on throughDate include
   ];
   assert.deepStrictEqual(KO.deliveredPerSize(dv, "2026-06-01", "2026-07-01"), { "1L": 3 });
 });
+
+test("whatsappOrderText builds new/delivered messages", () => {
+  assert.strictEqual(KO.whatsappOrderText("new", "Palm Spot", "8x 1 L Ginger"),
+    "🧋 New order — Palm Spot: 8x 1 L Ginger");
+  assert.strictEqual(KO.whatsappOrderText("delivered", "Sun Spot", "6x 270 ml Lemon"),
+    "✅ Delivered — Sun Spot: 6x 270 ml Lemon");
+  assert.match(KO.whatsappOrderText("anything-else", "X", "y"), /^🧋 New order — /);
+});

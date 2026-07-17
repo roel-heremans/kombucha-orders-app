@@ -104,6 +104,12 @@
     // Optional new-order email alerts (see docs/EMAILJS_SETUP.md). Empty = disabled.
     const EMAILJS_CONFIG = { serviceId: "service_o9ospkv", templateId: "template_flxfpn9", publicKey: "xA2Pc69R2LtlXm0Rm" };
 
+    // Optional WhatsApp alerts via CallMeBot (see docs/CALLMEBOT_SETUP.md). Empty phone/apikey = skipped.
+    const CALLMEBOT_RECIPIENTS = [
+      { phone: "", apikey: "" }, // Roel
+      { phone: "", apikey: "" }, // Nina
+    ];
+
     const ADMIN_EMAILS = ["roel.heremans@gmail.com", "reissnina@gmail.com"];
 
     const app = initializeApp(FIREBASE_CONFIG);
@@ -312,6 +318,16 @@
       }
     };
 
+    window.APP.notifyWhatsApp = function (text) {
+      (CALLMEBOT_RECIPIENTS || []).forEach(function (r) {
+        if (!r || !r.phone || !r.apikey) return;
+        const url = "https://api.callmebot.com/whatsapp.php?phone=" + encodeURIComponent(r.phone) +
+          "&text=" + encodeURIComponent(text) + "&apikey=" + encodeURIComponent(r.apikey);
+        try { fetch(url, { mode: "no-cors" }).catch(function (e) { console.warn("whatsapp failed:", e); }); }
+        catch (e) { console.warn("whatsapp failed:", e); }
+      });
+    };
+
     window.APP.createRestaurantLogin = async function (customerId, email, password) {
       const name = "rlogin-" + customerId;
       let secondary;
@@ -485,7 +501,13 @@
           const ref = await A.addDelivery(d);
           const orderId = fulfilling;
           fulfilling = null;
-          if (orderId) await A.setOrderDelivered(orderId, ref.id);
+          if (orderId) {
+            await A.setOrderDelivered(orderId, ref.id);
+            try {
+              A.notifyWhatsApp(KO.whatsappOrderText("delivered", A.customerName(d.customerId),
+                KO.orderItemsSummary(d, A.state.settings.sizes, A.flavourName)));
+            } catch (e) { console.warn("delivered whatsapp skipped:", e); }
+          }
         }
         built = false;
         renderNew();
@@ -1451,6 +1473,10 @@
             A.state.settings.sizes, A.flavourName, new Date().toLocaleString()
           ));
         } catch (e) { console.warn("order email skipped:", e); }
+        try {
+          A.notifyWhatsApp(KO.whatsappOrderText("new", A.myCustomer.name,
+            KO.orderItemsSummary({ items }, A.state.settings.sizes, A.flavourName)));
+        } catch (e) { console.warn("order whatsapp skipped:", e); }
       }
     }
 

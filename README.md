@@ -47,6 +47,10 @@ When a restaurant places an order, the app can optionally email Roel + Nina via
 EmailJS (client-side). See [`docs/EMAILJS_SETUP.md`](docs/EMAILJS_SETUP.md) for
 setup; the feature is off until configured with your EmailJS credentials.
 
+WhatsApp alerts (new order + delivered) can also be sent to Roel + Nina via
+CallMeBot (client-side). See [`docs/CALLMEBOT_SETUP.md`](docs/CALLMEBOT_SETUP.md)
+for setup; the feature is off until configured.
+
 ## Bottle sizes & pricing (defaults, editable in Settings)
 
 | Size   | Sale price | Deposit |

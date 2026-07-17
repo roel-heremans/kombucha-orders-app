@@ -810,7 +810,7 @@
       return `<div class="row conv-row">` +
         `<div style="flex:0 0 74px"><label>270 ml</label><input class="cv-count" type="number" min="0" value="${c.count270 != null ? c.count270 : ""}"/></div>` +
         `<div style="flex:0 0 66px"><label>1 L used</label><input class="cv-used" type="number" min="0" value="${c.used1L != null ? c.used1L : ""}"/></div>` +
-        `<div><label>Date</label><input class="cv-date" type="date" value="${c.date || ""}"/></div>` +
+        `<div><label>Date</label><input class="cv-date" type="date" value="${A.esc(c.date || "")}"/></div>` +
         `<button class="link cv-del" style="flex:0 0 28px">✕</button></div>`;
     }
 
@@ -819,12 +819,12 @@
       const convs = b.conversions || [];
       return `<div class="card" data-batchform="${b.id}"><strong>${A.esc(KO.formatBatchNumber(b.number))}</strong>` +
         `<h4>1 · Sweetened tea</h4><div class="row"><div><label>Water (L)</label><input id="bWater" type="number" min="0" step="0.5" value="${s1.waterLiters != null ? s1.waterLiters : ""}"/></div>` +
-        `<div><label>Boil date</label><input id="bDate1" type="date" value="${s1.date || ""}"/></div></div>` +
+        `<div><label>Boil date</label><input id="bDate1" type="date" value="${A.esc(s1.date || "")}"/></div></div>` +
         `<h4>2 · 8 L jars</h4><div class="row"><div><label>Jars</label><input id="bJars" type="number" min="0" value="${s2.jars != null ? s2.jars : ""}"/></div>` +
-        `<div><label>Date</label><input id="bDate2" type="date" value="${s2.date || ""}"/></div></div>` +
-        `<h4>3 · Polsinelli 70 L</h4><label>Date</label><input id="bDate3" type="date" value="${s3.date || ""}"/>` +
+        `<div><label>Date</label><input id="bDate2" type="date" value="${A.esc(s2.date || "")}"/></div></div>` +
+        `<h4>3 · Polsinelli 70 L</h4><label>Date</label><input id="bDate3" type="date" value="${A.esc(s3.date || "")}"/>` +
         `<h4>4 · Bottling</h4><div class="row"><div><label>1 L bottles</label><input id="bBottles" type="number" min="0" value="${s4.bottles1L != null ? s4.bottles1L : ""}"/></div>` +
-        `<div><label>Date</label><input id="bDate4" type="date" value="${s4.date || ""}"/></div></div>` +
+        `<div><label>Date</label><input id="bDate4" type="date" value="${A.esc(s4.date || "")}"/></div></div>` +
         `<h4>270 ml conversions</h4><div id="bConvs">${convs.map(convRowHtml).join("")}</div>` +
         `<button class="link" id="bAddConv">➕ Add conversion</button>` +
         `<p id="bMsg" class="muted"></p>` +

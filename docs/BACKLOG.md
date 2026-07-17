@@ -10,9 +10,9 @@ Status legend: 🟡 next · ⚪ planned · 💡 idea / deferred · ✅ done
 
 ## Ideas / deferred 💡
 
-- **New-order notifications** — email and/or WhatsApp alert to Roel + Nina when a
-  restaurant places an order (currently in-app pending badge only). Client-side
-  EmailJS (free, no backend) or a Cloud Function on the Blaze plan for WhatsApp.
+- **WhatsApp order notifications** — a WhatsApp alert on new orders would need a
+  backend (Cloud Function on the Blaze plan + Twilio). Email alerts are done (see
+  Done below).
 - **Order history archival** — an admin action to archive/delete very old orders,
   or filter finished orders by restaurant/date (current: pending-only default +
   "Show finished" toggle).
@@ -22,6 +22,9 @@ Status legend: 🟡 next · ⚪ planned · 💡 idea / deferred · ✅ done
 
 ## Done ✅
 
+- **New-order email notifications**: best-effort EmailJS email to Roel + Nina
+  when a restaurant places an order (client-side, no backend; order always saves
+  regardless). Configured + verified live. Setup in `docs/EMAILJS_SETUP.md`.
 - **Project B — Recibo Verde PDF distribution**: admins upload a restaurant's
   monthly RV PDF (base64 in Firestore, one-per-month replace, 700 KB cap,
   %PDF-validated) from the Recibo view; restaurants download/print their own via

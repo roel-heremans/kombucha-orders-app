@@ -113,7 +113,7 @@
     });
 
     // Expose to later-task code via a single namespace.
-    window.APP = { app, auth, db, state: { customers: [], flavours: [], deliveries: [], orders: [], recibos: [], batches: [], settings: null }, current: {} };
+    window.APP = { app, auth, db, state: { customers: [], flavours: [], deliveries: [], orders: [], recibos: [], batches: [], stocktakes: [], settings: null }, current: {} };
     window.APP.esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
 
     // Online/offline banner
@@ -218,6 +218,7 @@
       watch("orders", S.orders);
       watch("recibos", S.recibos);
       watch("batches", S.batches);
+      watch("stocktakes", S.stocktakes);
       window.APP.render();
     };
 
@@ -287,6 +288,9 @@
     window.APP.addBatch = (o) => addDoc(collection(db, "batches"), o);
     window.APP.updateBatch = (id, o) => updateDoc(doc(db, "batches", id), o);
     window.APP.deleteBatch = (id) => deleteDoc(doc(db, "batches", id));
+
+    window.APP.addStocktake = (o) => addDoc(collection(db, "stocktakes"), o);
+    window.APP.deleteStocktake = (id) => deleteDoc(doc(db, "stocktakes", id));
 
     window.APP.notifyNewOrder = async function (params) {
       const c = EMAILJS_CONFIG;

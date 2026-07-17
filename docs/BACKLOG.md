@@ -22,6 +22,10 @@ Status legend: 🟡 next · ⚪ planned · 💡 idea / deferred · ✅ done
 
 ## Done ✅
 
+- **Restaurant language (EN / PT)**: restaurants toggle English/Portuguese
+  (per-device, default PT); all restaurant-facing strings, order statuses, and
+  recibo month labels are translated. Admin app, emails, and PDFs stay English.
+  EN/PT dictionary + `t()` in `lib.js`.
 - **Production / fermentation tracking**: admin-only Production tab logging
   batches (Batch 001…) through 4 steps + 270 ml conversions (1 L-used auto-fills
   ceil), with a windowed summary of 1 L bottled, 270 ml made, 1 L used, sold

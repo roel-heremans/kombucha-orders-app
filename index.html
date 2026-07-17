@@ -795,6 +795,19 @@
     }
     function litres(v) { return KO.formatMoney(v) + " L"; }
 
+    function todayStr() {
+      const d = new Date(); const off = d.getTimezoneOffset();
+      return new Date(d.getTime() - off * 60000).toISOString().slice(0, 10);
+    }
+    function stRow(st, periods, sizes) {
+      const countsStr = sizes.map((s) => `${A.esc(s.label)}: ${(st.counts && st.counts[s.id]) || 0}`).join(" · ");
+      const period = periods.find((p) => p.toDate === st.date);
+      const consStr = period ? " · consumed " + sizes.map((s) => `${A.esc(s.label)}: ${period.consumed[s.id] || 0}`).join(" · ") : "";
+      return `<div class="row" style="justify-content:space-between"><div>` +
+        `<strong>${A.esc(st.date)}</strong> — ${countsStr}<span class="muted">${consStr}</span></div>` +
+        `<button class="link" data-delst="${st.id}">Delete</button></div>`;
+    }
+
     function batchReadCard(b) {
       const lines = [];
       if (b.step1 && b.step1.date) lines.push(`Tea: ${b.step1.waterLiters || 0} L water · ${A.esc(b.step1.date)}`);
@@ -861,9 +874,14 @@
       const sizes = A.state.settings ? A.state.settings.sizes : [];
       const sum = KO.productionSummary(A.state.batches, startMk, endMk);
       const soldL = KO.soldLitersInWindow(A.state.deliveries, sizes, startMk, endMk);
-      const family = sum.bottled1L - soldL;
       const isCustom = w.preset === "custom";
       const batches = A.state.batches.slice().sort((a, b) => (b.number || 0) - (a.number || 0));
+      const avail = KO.availableToSell(A.state.stocktakes, A.state.batches, A.state.deliveries);
+      const baseSt = KO.latestStocktake(A.state.stocktakes, null);
+      const periods = KO.consumptionPeriods(A.state.stocktakes, A.state.batches, A.state.deliveries);
+      const consumedTotal = KO.sumConsumption(periods);
+      const consumedL = sizes.reduce((sum2, s) => sum2 + KO.sizeLiters(s) * (consumedTotal[s.id] || 0), 0);
+      const stTakes = A.state.stocktakes.slice().sort((a, b) => (a.date < b.date ? 1 : -1));
 
       container.innerHTML =
         `<div class="card"><label>Window</label>` +
@@ -878,8 +896,25 @@
           `<p class="muted" style="margin-top:6px">Showing: ${A.esc(label)}</p></div>` +
         `<div class="card"><h4>Produced (${A.esc(label)})</h4>` +
           `<p>1 L bottled: <strong>${sum.bottled1L}</strong> · 270 ml made: <strong>${sum.made270}</strong> · 1 L used for 270 ml: <strong>${sum.used1L}</strong></p>` +
-          `<p>Sold: <strong>${litres(soldL)}</strong> · Family consumption (produced − sold): <strong>${litres(family)}</strong></p>` +
-          `<p class="muted">Family consumption is most meaningful over a wide window (This year, or a custom range covering all batches).</p></div>` +
+          `<p>Sold: <strong>${litres(soldL)}</strong></p></div>` +
+        `<div class="card"><h4>Available to sell</h4>` +
+          (avail
+            ? `<p>` + sizes.map((s) => `${A.esc(s.label)}: <strong>${avail[s.id] != null ? avail[s.id] : 0}</strong>`).join(" · ") + `</p>` +
+              `<p class="muted">Expected as of the stocktake on ${A.esc(baseSt.date)}, plus bottling minus deliveries since.</p>`
+            : `<p class="muted">Record a stocktake below to start tracking available stock and consumption.</p>`) + `</div>` +
+        `<div class="card"><h4>Record stocktake</h4>` +
+          `<p class="muted">Count the sellable bottles on the sill per size and save. Consumption is reconciled against your previous stocktake.</p>` +
+          sizes.map((s) => `<div class="row"><div><label>${A.esc(s.label)}</label><input class="st-count" data-size="${s.id}" type="number" min="0" value=""/></div></div>`).join("") +
+          `<label>Date</label><input id="stDate" type="date" value="${todayStr()}"/>` +
+          `<p id="stMsg" class="muted"></p>` +
+          `<button class="primary" id="stSave">Save stocktake</button></div>` +
+        `<div class="card"><h4>Stocktakes &amp; consumption</h4>` +
+          (stTakes.length
+            ? (periods.length
+                ? `<p>Total private consumption: <strong>` + sizes.map((s) => `${A.esc(s.label)}: ${consumedTotal[s.id] || 0}`).join(" · ") + `</strong> · ${litres(consumedL)}</p>`
+                : `<p class="muted">Record a second stocktake to see consumption.</p>`) +
+              stTakes.map((st) => stRow(st, periods, sizes)).join("")
+            : "<p class='muted'>No stocktakes yet.</p>") + `</div>` +
         `<div class="card"><button class="primary" id="newBatch">➕ New batch</button></div>` +
         (batches.length ? batches.map((b) => (b.id === editingId ? batchEditCard(b) : batchReadCard(b))).join("")
           : "<p class='muted'>No batches yet.</p>");
@@ -928,6 +963,25 @@
           catch (ex) { const m = container.querySelector("#bMsg"); if (m) m.textContent = "Save failed: " + ex.message; }
         });
       }
+
+      const stSave = container.querySelector("#stSave");
+      if (stSave) stSave.addEventListener("click", async () => {
+        const date = container.querySelector("#stDate").value;
+        const setMsg = (t) => { const m = container.querySelector("#stMsg"); if (m) m.textContent = t; };
+        if (!date) { setMsg("Choose a date."); return; }
+        const counts = {};
+        container.querySelectorAll(".st-count").forEach((i) => { counts[i.dataset.size] = parseInt(i.value, 10) || 0; });
+        stSave.disabled = true; setMsg("Saving…");
+        try {
+          await A.addStocktake({ date, counts, createdAt: A.serverTimestamp() });
+          const m = container.querySelector("#stMsg"); if (m) m.textContent = "Saved ✓";
+        } catch (ex) {
+          const m = container.querySelector("#stMsg"); if (m) m.textContent = "Save failed: " + (ex.code || ex.message);
+          const b = container.querySelector("#stSave"); if (b) b.disabled = false;
+        }
+      });
+      container.querySelectorAll("[data-delst]").forEach((b) =>
+        b.addEventListener("click", async () => { if (confirm("Delete this stocktake?")) await A.deleteStocktake(b.dataset.delst); }));
     }
 
     A.renderers.production = render;

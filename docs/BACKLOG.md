@@ -22,6 +22,9 @@ Status legend: 🟡 next · ⚪ planned · 💡 idea / deferred · ✅ done
 
 ## Done ✅
 
+- **Reorder prefill**: the restaurant New-order form pre-fills with the line
+  items (size + flavour + quantity) of their most recent non-cancelled order,
+  editable before sending. Tested `lastOrderItems` helper.
 - **Restaurant language (EN / PT)**: restaurants toggle English/Portuguese
   (per-device, default PT); all restaurant-facing strings, order statuses, and
   recibo month labels are translated. Admin app, emails, and PDFs stay English.

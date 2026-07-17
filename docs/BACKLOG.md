@@ -10,9 +10,6 @@ Status legend: 🟡 next · ⚪ planned · 💡 idea / deferred · ✅ done
 
 ## Ideas / deferred 💡
 
-- **WhatsApp order notifications** — a WhatsApp alert on new orders would need a
-  backend (Cloud Function on the Blaze plan + Twilio). Email alerts are done (see
-  Done below).
 - **Order history archival** — an admin action to archive/delete very old orders,
   or filter finished orders by restaurant/date (current: pending-only default +
   "Show finished" toggle).
@@ -22,6 +19,9 @@ Status legend: 🟡 next · ⚪ planned · 💡 idea / deferred · ✅ done
 
 ## Done ✅
 
+- **WhatsApp notifications (CallMeBot)**: best-effort WhatsApp to Roel + Nina on
+  a new order and when an order is delivered, client-side via CallMeBot (no
+  backend). Dormant until configured; see `docs/CALLMEBOT_SETUP.md`.
 - **Available-to-sell stock & consumption**: admin records dated per-size
   stocktakes; the Production tab tracks sellable stock forward (production adds,
   deliveries subtract) and derives private consumption by reconciling each new

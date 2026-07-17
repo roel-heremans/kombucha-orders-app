@@ -55,9 +55,17 @@ Steps are filled in as they happen — a batch can be saved partway through.
   `"Batch 001"` … (no truncation for n ≥ 1000).
 - `bottles1LForConversion(count270)` → `Math.ceil(count270 * 270 / 1000)`
   (e.g. 4 → 2, 8 → 3, 0 → 0).
+- `sizeLiters(size)` → liters of one bottle of that size. Uses `size.liters` if
+  it is a number; else parses the label (`"1 L"` → 1, `"270 ml"` → 0.27,
+  `"500 ml"` → 0.5, `"1.5 L"` → 1.5); returns 0 if unparseable. Lets liters be
+  derived from existing settings without a schema change, while allowing a future
+  explicit `liters` field to take precedence.
+- `soldLitersInWindow(deliveries, sizes, startMk, endMk)` → Σ over deliveries
+  whose `date` is in the window of Σ items `sizeLiters(size) × quantity`.
 - `productionSummary(batches, startMk, endMk)` → `{ bottled1L, made270, used1L }`:
   - `bottled1L` = Σ `step4.bottles1L` for batches whose `step4.date` is in the
-    window (via existing `inWindow`).
+    window (via existing `inWindow`). This is also the **produced liters** (1 L
+    bottles × 1 L each).
   - `made270` = Σ `conversion.count270` for conversions whose `date` is in window.
   - `used1L` = Σ `conversion.used1L` for conversions whose `date` is in window.
   Missing/blank numbers count as 0; batches/conversions without a date are
@@ -66,6 +74,19 @@ Steps are filled in as they happen — a batch can be saved partway through.
 Reuses the existing window helpers (`inWindow`, `monthKeysBetween`,
 `resolveWindow`, `windowLabel`).
 
+### Family consumption
+
+`family consumption (L) = produced − sold`, where **produced** = `bottled1L`
+(1 L bottling volume — all kombucha made; 270 ml are repackaged 1 L, not new
+production) and **sold** = `soldLitersInWindow(...)` (delivered volume of every
+size). This correctly captures both the 270 ml conversion leftovers and anything
+drunk at home, since everything produced but not sold is consumed. Computed in
+the Production view as `productionSummary.bottled1L − soldLitersInWindow(...)`.
+It is a per-window figure (produced counts by bottling date, sold by delivery
+date), so it is most meaningful over a wide window (This year / a Custom range
+covering the whole history); a narrow month can read negatively if a batch is
+sold in a later month than it was bottled.
+
 ## New "Production" view
 
 A new nav tab **Production** and `view-production` container (admin app only).
@@ -73,9 +94,11 @@ A new nav tab **Production** and `view-production` container (admin app only).
 - **Window control:** the same preset dropdown as the Dashboard (This month /
   Last month / This year / Custom range…) with its own state
   `A.current.prodWindow = { preset, startMk, endMk }`, default `this-month`.
-- **Summary card** (windowed, using `productionSummary` + `windowLabel`):
-  "Produced (<label>): 1 L bottled **X** · 270 ml made **Y** · 1 L used for
-  270 ml **Z**" (net 1 L = X − Z shown as a secondary line).
+- **Summary card** (windowed, using `productionSummary`, `soldLitersInWindow` +
+  `windowLabel`): "Produced (<label>): 1 L bottled **X** · 270 ml made **Y** ·
+  1 L used for 270 ml **Z**", plus **Sold: S L** and **Family consumption
+  (produced − sold): X − S L** (with a one-line hint that it's most meaningful
+  over a wide window).
 - **"+ New batch"** button: creates a batch doc with the next number, `createdAt`,
   and empty steps, then opens that batch's edit form.
 - **Batch list:** all batches, highest number first. Each batch renders as a card.
@@ -134,8 +157,10 @@ neither read nor write batches.
 ## Testing
 
 - `lib.js`: unit tests for `nextBatchNumber` (empty + gaps), `formatBatchNumber`
-  (`001`, and ≥1000), `bottles1LForConversion` (0/4/8 and boundaries), and
-  `productionSummary` (windowing by step4.date / conversion.date, blank handling).
+  (`001`, and ≥1000), `bottles1LForConversion` (0/4/8 and boundaries),
+  `sizeLiters` (L/ml labels + explicit `liters` field), `soldLitersInWindow`
+  (windowed delivered volume across sizes), and `productionSummary` (windowing by
+  step4.date / conversion.date, blank handling).
 - Manual (admin, after rules redeploy): create a batch → it gets the next number;
   fill each step + add/remove 270 ml conversions (1 L-used auto-fills, editable);
   Save persists; the windowed summary reflects bottling/conversions in the
@@ -150,8 +175,10 @@ neither read nor write batches.
 
 ## Out of scope (v1)
 
-- Reconciling produced vs delivered/sold (no stock/inventory ledger).
-- Linking production into the sales Dashboard.
+- A per-bottle stock/inventory ledger (current-on-hand counts). Family
+  consumption is an **aggregate liters** figure (produced − sold), not a running
+  bottle inventory.
+- Linking production into the sales Dashboard (production has its own tab/window).
 - Tracking sugar/tea amounts, temperature, SCOBY, or fermentation duration beyond
   what the step dates imply.
 - Restaurant visibility of any production data.

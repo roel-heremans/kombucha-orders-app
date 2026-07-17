@@ -57,6 +57,7 @@
       <button data-view="deliveries">Deliveries</button>
       <button data-view="orders">Orders <span id="ordersBadge" class="badge hidden"></span></button>
       <button data-view="dashboard">Dashboard</button>
+      <button data-view="production">Production</button>
       <button data-view="recibo">Recibo</button>
       <button data-view="settings">Settings</button>
     </nav>
@@ -65,6 +66,7 @@
       <div id="view-deliveries" class="view hidden"></div>
       <div id="view-orders" class="view hidden"></div>
       <div id="view-dashboard" class="view hidden"></div>
+      <div id="view-production" class="view hidden"></div>
       <div id="view-recibo" class="view hidden"></div>
       <div id="view-settings" class="view hidden"></div>
     </main>
@@ -774,6 +776,157 @@
     container.addEventListener("click", showTip); // fallback for older browsers
 
     A.renderers.dashboard = render;
+  });
+  </script>
+
+  <script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const A = window.APP, KO = window.KO;
+    const container = document.getElementById("view-production");
+    let editingId = null; // batch id being edited inline, or null
+
+    function currentMonthKey() {
+      const d = new Date();
+      return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
+    }
+    function litres(v) { return KO.formatMoney(v) + " L"; }
+
+    function batchReadCard(b) {
+      const lines = [];
+      if (b.step1 && b.step1.date) lines.push(`Tea: ${b.step1.waterLiters || 0} L water · ${A.esc(b.step1.date)}`);
+      if (b.step2 && b.step2.date) lines.push(`Jars: ${b.step2.jars || 0} × 8 L · ${A.esc(b.step2.date)}`);
+      if (b.step3 && b.step3.date) lines.push(`Polsinelli: ${A.esc(b.step3.date)}`);
+      if (b.step4 && b.step4.date) lines.push(`Bottled: ${b.step4.bottles1L || 0} × 1 L · ${A.esc(b.step4.date)}`);
+      const convs = (b.conversions || []).filter((c) => c && c.date);
+      if (convs.length) lines.push("270 ml: " + convs.map((c) => `${c.count270 || 0}× (${c.used1L || 0}×1L) ${A.esc(c.date)}`).join(" · "));
+      const body = lines.length ? lines.map((l) => `<div class="muted">${l}</div>`).join("") : "<div class='muted'>No steps recorded yet.</div>";
+      return `<div class="card"><strong>${A.esc(KO.formatBatchNumber(b.number))}</strong>${body}` +
+        `<div class="row" style="margin-top:8px"><button class="link" data-editbatch="${b.id}">Edit</button> · ` +
+        `<button class="link" data-delbatch="${b.id}">Delete</button></div></div>`;
+    }
+
+    function convRowHtml(c) {
+      c = c || {};
+      return `<div class="row conv-row">` +
+        `<div style="flex:0 0 74px"><label>270 ml</label><input class="cv-count" type="number" min="0" value="${c.count270 != null ? c.count270 : ""}"/></div>` +
+        `<div style="flex:0 0 66px"><label>1 L used</label><input class="cv-used" type="number" min="0" value="${c.used1L != null ? c.used1L : ""}"/></div>` +
+        `<div><label>Date</label><input class="cv-date" type="date" value="${c.date || ""}"/></div>` +
+        `<button class="link cv-del" style="flex:0 0 28px">✕</button></div>`;
+    }
+
+    function batchEditCard(b) {
+      const s1 = b.step1 || {}, s2 = b.step2 || {}, s3 = b.step3 || {}, s4 = b.step4 || {};
+      const convs = b.conversions || [];
+      return `<div class="card" data-batchform="${b.id}"><strong>${A.esc(KO.formatBatchNumber(b.number))}</strong>` +
+        `<h4>1 · Sweetened tea</h4><div class="row"><div><label>Water (L)</label><input id="bWater" type="number" min="0" step="0.5" value="${s1.waterLiters != null ? s1.waterLiters : ""}"/></div>` +
+        `<div><label>Boil date</label><input id="bDate1" type="date" value="${s1.date || ""}"/></div></div>` +
+        `<h4>2 · 8 L jars</h4><div class="row"><div><label>Jars</label><input id="bJars" type="number" min="0" value="${s2.jars != null ? s2.jars : ""}"/></div>` +
+        `<div><label>Date</label><input id="bDate2" type="date" value="${s2.date || ""}"/></div></div>` +
+        `<h4>3 · Polsinelli 70 L</h4><label>Date</label><input id="bDate3" type="date" value="${s3.date || ""}"/>` +
+        `<h4>4 · Bottling</h4><div class="row"><div><label>1 L bottles</label><input id="bBottles" type="number" min="0" value="${s4.bottles1L != null ? s4.bottles1L : ""}"/></div>` +
+        `<div><label>Date</label><input id="bDate4" type="date" value="${s4.date || ""}"/></div></div>` +
+        `<h4>270 ml conversions</h4><div id="bConvs">${convs.map(convRowHtml).join("")}</div>` +
+        `<button class="link" id="bAddConv">➕ Add conversion</button>` +
+        `<p id="bMsg" class="muted"></p>` +
+        `<button class="primary" id="bSave">Save batch</button> <button class="link" id="bCancel">Cancel</button></div>`;
+    }
+
+    function readForm() {
+      const numOr0 = (sel) => { const v = container.querySelector(sel).value; return v === "" ? 0 : parseFloat(v) || 0; };
+      const val = (sel) => container.querySelector(sel).value;
+      const convs = [];
+      container.querySelectorAll(".conv-row").forEach((r) => {
+        const count270 = parseInt(r.querySelector(".cv-count").value, 10) || 0;
+        const used1L = parseInt(r.querySelector(".cv-used").value, 10) || 0;
+        const date = r.querySelector(".cv-date").value;
+        if (date && count270 > 0) convs.push({ count270, used1L, date });
+      });
+      return {
+        step1: { waterLiters: numOr0("#bWater"), date: val("#bDate1") },
+        step2: { jars: numOr0("#bJars"), date: val("#bDate2") },
+        step3: { date: val("#bDate3") },
+        step4: { bottles1L: numOr0("#bBottles"), date: val("#bDate4") },
+        conversions: convs,
+      };
+    }
+
+    function render() {
+      const w = A.current.prodWindow || (A.current.prodWindow = { preset: "this-month" });
+      const { startMk, endMk } = KO.resolveWindow(w.preset, w.startMk, w.endMk, currentMonthKey());
+      const label = KO.windowLabel(startMk, endMk);
+      const sizes = A.state.settings ? A.state.settings.sizes : [];
+      const sum = KO.productionSummary(A.state.batches, startMk, endMk);
+      const soldL = KO.soldLitersInWindow(A.state.deliveries, sizes, startMk, endMk);
+      const family = sum.bottled1L - soldL;
+      const isCustom = w.preset === "custom";
+      const batches = A.state.batches.slice().sort((a, b) => (b.number || 0) - (a.number || 0));
+
+      container.innerHTML =
+        `<div class="card"><label>Window</label>` +
+          `<select id="prodPreset">` +
+            `<option value="this-month" ${w.preset === "this-month" ? "selected" : ""}>This month</option>` +
+            `<option value="last-month" ${w.preset === "last-month" ? "selected" : ""}>Last month</option>` +
+            `<option value="this-year" ${w.preset === "this-year" ? "selected" : ""}>This year</option>` +
+            `<option value="custom" ${isCustom ? "selected" : ""}>Custom range…</option>` +
+          `</select>` +
+          (isCustom ? `<div class="row"><div><label>Start</label><input id="prodStart" type="month" value="${startMk}"/></div>` +
+            `<div><label>End</label><input id="prodEnd" type="month" value="${endMk}"/></div></div>` : "") +
+          `<p class="muted" style="margin-top:6px">Showing: ${A.esc(label)}</p></div>` +
+        `<div class="card"><h4>Produced (${A.esc(label)})</h4>` +
+          `<p>1 L bottled: <strong>${sum.bottled1L}</strong> · 270 ml made: <strong>${sum.made270}</strong> · 1 L used for 270 ml: <strong>${sum.used1L}</strong></p>` +
+          `<p>Sold: <strong>${litres(soldL)}</strong> · Family consumption (produced − sold): <strong>${litres(family)}</strong></p>` +
+          `<p class="muted">Family consumption is most meaningful over a wide window (This year, or a custom range covering all batches).</p></div>` +
+        `<div class="card"><button class="primary" id="newBatch">➕ New batch</button></div>` +
+        (batches.length ? batches.map((b) => (b.id === editingId ? batchEditCard(b) : batchReadCard(b))).join("")
+          : "<p class='muted'>No batches yet.</p>");
+
+      container.querySelector("#prodPreset").addEventListener("change", (e) => { A.current.prodWindow = { preset: e.target.value, startMk, endMk }; render(); });
+      const si = container.querySelector("#prodStart"), ei = container.querySelector("#prodEnd");
+      if (si) si.addEventListener("change", (e) => { A.current.prodWindow = { preset: "custom", startMk: e.target.value, endMk }; render(); });
+      if (ei) ei.addEventListener("change", (e) => { A.current.prodWindow = { preset: "custom", startMk, endMk: e.target.value }; render(); });
+
+      container.querySelector("#newBatch").addEventListener("click", async () => {
+        const n = KO.nextBatchNumber(A.state.batches);
+        const ref = await A.addBatch({ number: n, conversions: [], createdAt: A.serverTimestamp() });
+        editingId = ref.id; render();
+      });
+
+      container.querySelectorAll("[data-editbatch]").forEach((btn) =>
+        btn.addEventListener("click", () => { editingId = btn.dataset.editbatch; render(); }));
+      container.querySelectorAll("[data-delbatch]").forEach((btn) =>
+        btn.addEventListener("click", async () => {
+          if (confirm("Delete this batch?")) { if (editingId === btn.dataset.delbatch) editingId = null; await A.deleteBatch(btn.dataset.delbatch); }
+        }));
+
+      const form = container.querySelector("[data-batchform]");
+      if (form) {
+        const convsDiv = container.querySelector("#bConvs");
+        container.querySelector("#bAddConv").addEventListener("click", (e) => {
+          e.preventDefault();
+          const tmp = document.createElement("div"); tmp.innerHTML = convRowHtml();
+          convsDiv.appendChild(tmp.firstElementChild);
+        });
+        convsDiv.addEventListener("input", (e) => {
+          if (e.target.classList.contains("cv-count")) {
+            const row = e.target.closest(".conv-row");
+            const cnt = parseInt(e.target.value, 10);
+            row.querySelector(".cv-used").value = cnt > 0 ? KO.bottles1LForConversion(cnt) : "";
+          }
+        });
+        convsDiv.addEventListener("click", (e) => {
+          if (e.target.classList.contains("cv-del")) { e.preventDefault(); e.target.closest(".conv-row").remove(); }
+        });
+        container.querySelector("#bCancel").addEventListener("click", (e) => { e.preventDefault(); editingId = null; render(); });
+        container.querySelector("#bSave").addEventListener("click", async () => {
+          const id = form.dataset.batchform;
+          const data = readForm();
+          try { await A.updateBatch(id, data); editingId = null; render(); }
+          catch (ex) { const m = container.querySelector("#bMsg"); if (m) m.textContent = "Save failed: " + ex.message; }
+        });
+      }
+    }
+
+    A.renderers.production = render;
   });
   </script>
 

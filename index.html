@@ -99,6 +99,9 @@
       appId: "1:260178477505:web:cc670a3534ca6469f9ef40",
     };
 
+    // Optional new-order email alerts (see docs/EMAILJS_SETUP.md). Empty = disabled.
+    const EMAILJS_CONFIG = { serviceId: "service_o9ospkv", templateId: "template_flxfpn9", publicKey: "xA2Pc69R2LtlXm0Rm" };
+
     const ADMIN_EMAILS = ["roel.heremans@gmail.com", "reissnina@gmail.com"];
 
     const app = initializeApp(FIREBASE_CONFIG);
@@ -277,6 +280,26 @@
     };
     window.APP.fetchReciboFile = function (id) { return getDoc(doc(db, "reciboFiles", id)); };
     window.APP.serverTimestamp = serverTimestamp;
+
+    window.APP.notifyNewOrder = async function (params) {
+      const c = EMAILJS_CONFIG;
+      if (!c.serviceId || !c.templateId || !c.publicKey) return; // disabled until configured
+      try {
+        const res = await fetch("https://api.emailjs.com/api/v1.0/email/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            service_id: c.serviceId,
+            template_id: c.templateId,
+            user_id: c.publicKey,
+            template_params: params || {},
+          }),
+        });
+        if (!res.ok) console.warn("notifyNewOrder: EmailJS HTTP", res.status);
+      } catch (e) {
+        console.warn("notifyNewOrder failed:", e);
+      }
+    };
 
     window.APP.createRestaurantLogin = async function (customerId, email, password) {
       const name = "rlogin-" + customerId;
@@ -1169,16 +1192,18 @@
       });
       if (items.length === 0) { err.textContent = "Add at least one bottle line with a flavour."; return; }
       if (btn) btn.disabled = true;
+      const preferredDate = body.querySelector("#orderDate").value || "";
+      const note = body.querySelector("#orderNote").value.trim();
+      let saved = false;
       try {
         await A.addOrder({
           customerId: A.myCustomer.id,
           customerUid: A.user.uid,
-          items,
-          preferredDate: body.querySelector("#orderDate").value || "",
-          note: body.querySelector("#orderNote").value.trim(),
+          items, preferredDate, note,
           status: "requested",
           createdAt: A.serverTimestamp(),
         });
+        saved = true;
         const msg = document.getElementById("orderErr");
         if (msg) msg.textContent = "Order sent ✓";
       } catch (ex) {
@@ -1186,6 +1211,17 @@
         if (msg) msg.textContent = "Send failed: " + ex.message;
         const b2 = document.getElementById("sendOrder");
         if (b2) b2.disabled = false;
+      }
+      if (saved) {
+        try {
+          A.notifyNewOrder(KO.orderEmailParams(
+            { items, preferredDate, note },
+            A.myCustomer.name,
+            A.state.settings.sizes,
+            A.flavourName,
+            new Date().toLocaleString()
+          ));
+        } catch (e) { console.warn("order email skipped:", e); }
       }
     }
 

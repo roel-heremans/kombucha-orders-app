@@ -41,8 +41,11 @@ Restaurants can place order requests from their own phone:
   records the delivery and marks the order **Delivered**.
 - A restaurant can **Cancel** an order while it is still Requested.
 
-Notifications (email/WhatsApp) are not built yet — admins see pending orders
-in-app. See the design spec for the deferred plan.
+## Order notifications
+
+When a restaurant places an order, the app can optionally email Roel + Nina via
+EmailJS (client-side). See [`docs/EMAILJS_SETUP.md`](docs/EMAILJS_SETUP.md) for
+setup; the feature is off until configured with your EmailJS credentials.
 
 ## Bottle sizes & pricing (defaults, editable in Settings)
 

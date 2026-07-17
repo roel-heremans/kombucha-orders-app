@@ -502,3 +502,48 @@ test("lastOrderItems returns [] for unknown uid, only-cancelled, or empty", () =
        items: [{ sizeId: "1L", flavourId: "x", quantity: 1 }] }], "U1"), []);
   assert.deepStrictEqual(KO.lastOrderItems([], "U1"), []);
 });
+
+const STOCKTAKES = [
+  { date: "2026-06-01", counts: { "1L": 20, "270ml": 5 } },
+  { date: "2026-07-01", counts: { "1L": 40, "270ml": 8 } },
+];
+const PROD_DELIVS = [
+  { date: "2026-06-20", items: [{ sizeId: "1L", flavourId: "x", quantity: 10 }] },
+  { date: "2026-06-25", items: [{ sizeId: "270ml", flavourId: "y", quantity: 3 },
+                                { sizeId: "1L", flavourId: "z", quantity: 5 }] },
+  { date: "2026-07-05", items: [{ sizeId: "1L", flavourId: "x", quantity: 30 }] },
+];
+
+test("producedPerSize: bottled1L − used1L and count270, exclusive start / inclusive end", () => {
+  assert.deepStrictEqual(KO.producedPerSize(BATCHES, "2026-06-01", "2026-07-01"), { "1L": 56, "270ml": 8 });
+  assert.deepStrictEqual(KO.producedPerSize(BATCHES, "2026-07-01", null), { "1L": 37, "270ml": 8 });
+});
+
+test("deliveredPerSize sums delivered quantity per size in range", () => {
+  assert.deepStrictEqual(KO.deliveredPerSize(PROD_DELIVS, "2026-06-01", "2026-07-01"), { "1L": 15, "270ml": 3 });
+  assert.deepStrictEqual(KO.deliveredPerSize(PROD_DELIVS, "2026-07-01", null), { "1L": 30 });
+});
+
+test("latestStocktake picks the greatest date <= asOf, or null", () => {
+  assert.strictEqual(KO.latestStocktake([], null), null);
+  assert.strictEqual(KO.latestStocktake(STOCKTAKES, null).date, "2026-07-01");
+  assert.strictEqual(KO.latestStocktake(STOCKTAKES, "2026-06-15").date, "2026-06-01");
+});
+
+test("availableToSell = latest stocktake + produced − delivered since; null if none", () => {
+  assert.strictEqual(KO.availableToSell([], BATCHES, PROD_DELIVS), null);
+  assert.deepStrictEqual(KO.availableToSell(STOCKTAKES, BATCHES, PROD_DELIVS), { "1L": 47, "270ml": 16 });
+});
+
+test("consumptionPeriods reconciles expected − actual per interval; [] for <2", () => {
+  assert.deepStrictEqual(KO.consumptionPeriods([STOCKTAKES[0]], BATCHES, PROD_DELIVS), []);
+  const periods = KO.consumptionPeriods(STOCKTAKES, BATCHES, PROD_DELIVS);
+  assert.strictEqual(periods.length, 1);
+  assert.deepStrictEqual(periods[0], {
+    fromDate: "2026-06-01", toDate: "2026-07-01", consumed: { "1L": 21, "270ml": 2 } });
+});
+
+test("sumConsumption folds periods per size", () => {
+  const periods = KO.consumptionPeriods(STOCKTAKES, BATCHES, PROD_DELIVS);
+  assert.deepStrictEqual(KO.sumConsumption(periods), { "1L": 21, "270ml": 2 });
+});

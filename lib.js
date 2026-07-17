@@ -381,6 +381,20 @@
     };
   }
 
+  function lastOrderItems(orders, customerUid) {
+    const mine = (orders || []).filter(function (o) {
+      return o && o.customerUid === customerUid && o.status !== "cancelled";
+    }).slice().sort(function (a, b) {
+      const ta = (a.createdAt && a.createdAt.seconds) || 0;
+      const tb = (b.createdAt && b.createdAt.seconds) || 0;
+      return tb - ta;
+    });
+    if (!mine.length) return [];
+    return (mine[0].items || []).map(function (it) {
+      return { sizeId: it.sizeId, flavourId: it.flavourId, quantity: it.quantity };
+    });
+  }
+
   function orderStatusLabel(status, lang) {
     if (status === "delivered") return "✅ " + t(lang, "status_delivered");
     if (status === "cancelled") return "✖ " + t(lang, "status_cancelled");
@@ -508,5 +522,5 @@
     });
   }
 
-  return { formatMoney, sizeById, deliveryRevenue, deliveryDepositRefund, monthKey, inMonth, monthName, dayOfMonth, recentMonthKeys, resolveWindow, monthKeysBetween, inWindow, revenueInWindow, revenueByCustomerInWindow, flavourCountsInWindow, windowLabel, monthlyRevenue, revenueByCustomer, monthlyRevenueSeries, flavourCounts, revenueByCustomerType, outstandingByCustomer, reciboSizeLabel, reciboDocId, nextBatchNumber, formatBatchNumber, bottles1LForConversion, sizeLiters, soldLitersInWindow, productionSummary, generateRecibo, orderItemsSummary, orderEmailParams, orderStatusLabel, barChartSVG, stackedBarChartSVG, revenueByTypeInWindow, revenueTypeSeries, revenueTypeByYear, t };
+  return { formatMoney, sizeById, deliveryRevenue, deliveryDepositRefund, monthKey, inMonth, monthName, dayOfMonth, recentMonthKeys, resolveWindow, monthKeysBetween, inWindow, revenueInWindow, revenueByCustomerInWindow, flavourCountsInWindow, windowLabel, monthlyRevenue, revenueByCustomer, monthlyRevenueSeries, flavourCounts, revenueByCustomerType, outstandingByCustomer, reciboSizeLabel, reciboDocId, nextBatchNumber, formatBatchNumber, bottles1LForConversion, sizeLiters, soldLitersInWindow, productionSummary, generateRecibo, orderItemsSummary, orderEmailParams, lastOrderItems, orderStatusLabel, barChartSVG, stackedBarChartSVG, revenueByTypeInWindow, revenueTypeSeries, revenueTypeByYear, t };
 });

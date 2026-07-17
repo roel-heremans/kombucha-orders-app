@@ -475,3 +475,30 @@ test("monthName and windowLabel support Portuguese, English by default", () => {
   assert.strictEqual(KO.windowLabel("2026-07", "2026-07"), "Jul 2026");
   assert.strictEqual(KO.windowLabel("2026-03", "2026-03", "pt"), "Mar 2026");
 });
+
+const ORDERS = [
+  { customerUid: "U1", status: "cancelled", createdAt: { seconds: 300 },
+    items: [{ sizeId: "1L", flavourId: "gin", quantity: 9 }] },
+  { customerUid: "U1", status: "delivered", createdAt: { seconds: 200 },
+    items: [{ sizeId: "1L", flavourId: "gin", quantity: 8 },
+            { sizeId: "270ml", flavourId: "hib", quantity: 6 }] },
+  { customerUid: "U1", status: "requested", createdAt: { seconds: 100 },
+    items: [{ sizeId: "1L", flavourId: "lem", quantity: 2 }] },
+  { customerUid: "U2", status: "delivered", createdAt: { seconds: 250 },
+    items: [{ sizeId: "1L", flavourId: "gin", quantity: 99 }] },
+];
+
+test("lastOrderItems returns the newest non-cancelled order's items for the uid", () => {
+  assert.deepStrictEqual(KO.lastOrderItems(ORDERS, "U1"), [
+    { sizeId: "1L", flavourId: "gin", quantity: 8 },
+    { sizeId: "270ml", flavourId: "hib", quantity: 6 },
+  ]);
+});
+
+test("lastOrderItems returns [] for unknown uid, only-cancelled, or empty", () => {
+  assert.deepStrictEqual(KO.lastOrderItems(ORDERS, "U3"), []);
+  assert.deepStrictEqual(KO.lastOrderItems(
+    [{ customerUid: "U1", status: "cancelled", createdAt: { seconds: 5 },
+       items: [{ sizeId: "1L", flavourId: "x", quantity: 1 }] }], "U1"), []);
+  assert.deepStrictEqual(KO.lastOrderItems([], "U1"), []);
+});

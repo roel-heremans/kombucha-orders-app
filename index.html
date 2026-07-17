@@ -1214,20 +1214,22 @@
       try { localStorage.setItem(hiddenKey(), JSON.stringify(Array.from(set))); } catch (e) {}
     }
 
-    function sizeOptions() {
+    function sizeOptions(selected) {
       return (A.state.settings ? A.state.settings.sizes : [])
-        .map((s) => `<option value="${s.id}">${A.esc(s.label)}</option>`).join("");
+        .map((s) => `<option value="${s.id}" ${s.id === selected ? "selected" : ""}>${A.esc(s.label)}</option>`).join("");
     }
-    function flavourOptions() {
-      return `<option value="">${T("choose_flavour")}</option>` +
+    function flavourOptions(selected) {
+      return `<option value="" ${!selected ? "selected" : ""}>${T("choose_flavour")}</option>` +
         A.state.flavours.slice().sort((a, b) => a.name.localeCompare(b.name))
-          .map((f) => `<option value="${f.id}">${A.esc(f.name)}</option>`).join("");
+          .map((f) => `<option value="${f.id}" ${f.id === selected ? "selected" : ""}>${A.esc(f.name)}</option>`).join("");
     }
-    function itemRowHtml() {
+    function itemRowHtml(item) {
+      item = item || {};
+      const qty = item.quantity != null ? item.quantity : 1;
       return `<div class="row order-item">` +
-        `<div><label>${T("size")}</label><select class="oi-size">${sizeOptions()}</select></div>` +
-        `<div><label>${T("flavour")}</label><select class="oi-flav">${flavourOptions()}</select></div>` +
-        `<div style="flex:0 0 64px"><label>${T("qty")}</label><input class="oi-qty" type="number" min="1" value="1"/></div>` +
+        `<div><label>${T("size")}</label><select class="oi-size">${sizeOptions(item.sizeId)}</select></div>` +
+        `<div><label>${T("flavour")}</label><select class="oi-flav">${flavourOptions(item.flavourId)}</select></div>` +
+        `<div style="flex:0 0 64px"><label>${T("qty")}</label><input class="oi-qty" type="number" min="1" value="${qty}"/></div>` +
         `<button class="link oi-del" style="flex:0 0 32px">✕</button></div>`;
     }
 
@@ -1266,6 +1268,8 @@
       const visible = showCleared ? all : all.filter((o) => !hidden.has(o.id));
       const clearable = all.filter((o) => isFinished(o) && !hidden.has(o.id));
       const hiddenCount = all.filter((o) => hidden.has(o.id)).length;
+      const prefill = KO.lastOrderItems(A.state.orders, A.user && A.user.uid);
+      const itemsInit = (prefill.length ? prefill.map(itemRowHtml) : [itemRowHtml()]).join("");
 
       const ordersBody =
         all.length === 0 ? `<p class='muted'>${T("no_orders")}</p>` :
@@ -1282,7 +1286,7 @@
       body.innerHTML =
         langToggleHtml(lang) +
         `<div class="card"><h3>${T("new_order")}</h3>` +
-          `<div id="orderItems">${itemRowHtml()}</div>` +
+          `<div id="orderItems">${itemsInit}</div>` +
           `<button class="link" id="addOrderLine">${T("add_line")}</button>` +
           `<label>${T("preferred_date")}</label><input id="orderDate" type="date"/>` +
           `<label>${T("note")}</label><textarea id="orderNote" rows="2"></textarea>` +

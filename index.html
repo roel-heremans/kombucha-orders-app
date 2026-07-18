@@ -1253,12 +1253,12 @@
         const customerId = container.querySelector("#rlCust").value;
         const email = container.querySelector("#rlEmail").value.trim();
         const pw = container.querySelector("#rlPw").value;
-        if (!customerId || !email || pw.length < 6) { msg.textContent = "Choose a customer, email, and a password of 6+ chars."; return; }
+        if (!customerId || !email || pw.length < 6) { msg.textContent = "Choose a customer, an email or name, and a password of 6+ chars."; return; }
         rlCreate.disabled = true; msg.textContent = "Creating…";
         try {
           await A.createRestaurantLogin(customerId, email, pw);
           const okMsg = container.querySelector("#rlMsg");
-          if (okMsg) okMsg.textContent = "Login created ✓ — give the restaurant this email + password.";
+          if (okMsg) okMsg.textContent = "Login created ✓ — they log in with \"" + email + "\" and the password you set.";
         } catch (ex) {
           const failMsg = container.querySelector("#rlMsg");
           if (failMsg) failMsg.textContent = "Failed: " + (ex.code || ex.message);

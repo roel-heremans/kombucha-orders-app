@@ -472,6 +472,12 @@
           const name = prompt("New customer name:");
           if (name && name.trim()) { const ref = await A.addCustomer(name.trim()); refreshOptions(); e.target.value = ref.id; }
           else e.target.value = "";
+        } else if (e.target.value && !editing && !fulfilling) {
+          const items = KO.lastDeliveryItems(A.state.deliveries, e.target.value);
+          itemsDiv.innerHTML = "";
+          if (items.length) items.forEach((it) => itemsDiv.appendChild(itemRow(it)));
+          else itemsDiv.appendChild(itemRow());
+          updateSubtotal();
         }
       });
       container.querySelector("#addItem").addEventListener("click", (e) => { e.preventDefault(); itemsDiv.appendChild(itemRow()); });

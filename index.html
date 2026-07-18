@@ -41,8 +41,8 @@
   <main id="loginView">
     <div class="card">
       <h3>Log in</h3>
-      <label>Email</label>
-      <input id="loginEmail" type="email" autocomplete="username" />
+      <label>Email or name</label>
+      <input id="loginEmail" type="text" autocomplete="username" />
       <label>Password</label>
       <input id="loginPassword" type="password" autocomplete="current-password" />
       <p id="loginError" class="muted"></p>
@@ -101,6 +101,8 @@
       appId: "1:260178477505:web:cc670a3534ca6469f9ef40",
     };
 
+    const LOGIN_NAME_DOMAIN = "kombucha.app"; // bare names become <name>@this for Firebase auth
+
     // Optional new-order email alerts (see docs/EMAILJS_SETUP.md). Empty = disabled.
     const EMAILJS_CONFIG = { serviceId: "service_o9ospkv", templateId: "template_flxfpn9", publicKey: "xA2Pc69R2LtlXm0Rm" };
 
@@ -132,7 +134,7 @@
     const loginView = document.getElementById("loginView");
     const appView = document.getElementById("appView");
     document.getElementById("loginBtn").addEventListener("click", async () => {
-      const email = document.getElementById("loginEmail").value.trim();
+      const email = window.KO.loginEmail(document.getElementById("loginEmail").value, LOGIN_NAME_DOMAIN);
       const pw = document.getElementById("loginPassword").value;
       document.getElementById("loginError").textContent = "";
       try { await signInWithEmailAndPassword(auth, email, pw); }
@@ -329,14 +331,15 @@
     };
 
     window.APP.createRestaurantLogin = async function (customerId, email, password) {
+      const loginId = window.KO.loginEmail(email, LOGIN_NAME_DOMAIN);
       const name = "rlogin-" + customerId;
       let secondary;
       try { secondary = initializeApp(FIREBASE_CONFIG, name); }
       catch (e) { secondary = initializeApp(FIREBASE_CONFIG, name + "-2"); }
       try {
         const secAuth = getAuth(secondary);
-        const cred = await createUserWithEmailAndPassword(secAuth, email, password);
-        await updateDoc(doc(db, "customers", customerId), { uid: cred.user.uid, email });
+        const cred = await createUserWithEmailAndPassword(secAuth, loginId, password);
+        await updateDoc(doc(db, "customers", customerId), { uid: cred.user.uid, email: loginId });
         await signOut(secAuth);
       } finally {
         if (secondary) await deleteApp(secondary);
@@ -1185,7 +1188,7 @@
             A.state.customers.slice().sort((a,b)=>a.name.localeCompare(b.name)).map((c) =>
               `<option value="${c.id}">${A.esc(c.name)}${c.uid ? " ✓ has login" : ""}</option>`).join("") +
           `</select>` +
-          `<label>Login email</label><input id="rlEmail" type="email"/>` +
+          `<label>Login email or name</label><input id="rlEmail" type="text"/>` +
           `<label>Initial password</label><input id="rlPw" type="text" value=""/>` +
           `<button class="primary" id="rlCreate">Create login</button>` +
           `<p id="rlMsg" class="muted"></p></details></div>` +
@@ -1250,12 +1253,12 @@
         const customerId = container.querySelector("#rlCust").value;
         const email = container.querySelector("#rlEmail").value.trim();
         const pw = container.querySelector("#rlPw").value;
-        if (!customerId || !email || pw.length < 6) { msg.textContent = "Choose a customer, email, and a password of 6+ chars."; return; }
+        if (!customerId || !email || pw.length < 6) { msg.textContent = "Choose a customer, an email or name, and a password of 6+ chars."; return; }
         rlCreate.disabled = true; msg.textContent = "Creating…";
         try {
           await A.createRestaurantLogin(customerId, email, pw);
           const okMsg = container.querySelector("#rlMsg");
-          if (okMsg) okMsg.textContent = "Login created ✓ — give the restaurant this email + password.";
+          if (okMsg) okMsg.textContent = "Login created ✓ — they log in with \"" + email + "\" and the password you set.";
         } catch (ex) {
           const failMsg = container.querySelector("#rlMsg");
           if (failMsg) failMsg.textContent = "Failed: " + (ex.code || ex.message);

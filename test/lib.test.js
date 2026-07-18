@@ -577,3 +577,11 @@ test("lastDeliveryItems returns the newest delivery's items for the customer", (
   assert.deepStrictEqual(KO.lastDeliveryItems(DELIVS, "Z"), []);  // unknown customer
   assert.deepStrictEqual(KO.lastDeliveryItems([], "A"), []);      // empty
 });
+
+test("loginEmail passes through addresses and synthesizes from a bare name", () => {
+  assert.strictEqual(KO.loginEmail("roel.heremans@gmail.com", "kombucha.app"), "roel.heremans@gmail.com");
+  assert.strictEqual(KO.loginEmail("MixedCase@Example.COM", "kombucha.app"), "mixedcase@example.com");
+  assert.strictEqual(KO.loginEmail("Koa", "kombucha.app"), "koa@kombucha.app");
+  assert.strictEqual(KO.loginEmail("Koa Spot", "kombucha.app"), "koaspot@kombucha.app");
+  assert.strictEqual(KO.loginEmail("  Sun Spot  ", "kombucha.app"), "sunspot@kombucha.app");
+});

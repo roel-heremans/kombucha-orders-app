@@ -568,3 +568,12 @@ test("whatsappOrderText builds new/delivered messages", () => {
     "✅ Delivered — Sun Spot: 6x 270 ml Lemon");
   assert.match(KO.whatsappOrderText("anything-else", "X", "y"), /^🧋 New order — /);
 });
+
+test("lastDeliveryItems returns the newest delivery's items for the customer", () => {
+  assert.deepStrictEqual(KO.lastDeliveryItems(DELIVS, "A"),
+    [{ sizeId: "1L", flavourId: "gin", quantity: 1 }]);           // A's newest = 2026-07-01
+  assert.deepStrictEqual(KO.lastDeliveryItems(DELIVS, "B"),
+    [{ sizeId: "270ml", flavourId: "gin", quantity: 4 }]);        // B's only = 2026-06-15
+  assert.deepStrictEqual(KO.lastDeliveryItems(DELIVS, "Z"), []);  // unknown customer
+  assert.deepStrictEqual(KO.lastDeliveryItems([], "A"), []);      // empty
+});

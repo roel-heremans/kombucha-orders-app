@@ -439,6 +439,7 @@
       return {
         customerId: container.querySelector("#cust").value,
         date: container.querySelector("#date").value,
+        time: container.querySelector("#dtime").value,
         items, empties,
         note: container.querySelector("#note").value.trim(),
       };
@@ -450,13 +451,19 @@
       return new Date(d.getTime() - off * 60000).toISOString().slice(0, 10);
     }
 
+    function nowTime() {
+      const d = new Date();
+      return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+    }
+
     function buildForm() {
       container.innerHTML =
         `<div class="card">` +
         `<h3>${editing ? "Edit" : fulfilling ? "Fulfil order" : "New"} delivery</h3>` +
         (fulfilling && !editing ? `<p class="muted">Fulfilling a requested order — saving will mark it delivered.</p>` : "") +
         `<label>Customer</label><select id="cust">${customerOptionsHtml("")}</select>` +
-        `<label>Date</label><input id="date" type="date" value="${todayStr()}"/>` +
+        `<div class="row"><div><label>Date</label><input id="date" type="date" value="${todayStr()}"/></div>` +
+        `<div><label>Time</label><input id="dtime" type="time" value="${nowTime()}"/></div></div>` +
         `<h4>Bottles delivered</h4><div id="items"></div>` +
         `<button class="link" id="addItem">➕ Add line</button>` +
         `<h4>Empties received back</h4>${emptiesRows()}` +
@@ -533,6 +540,7 @@
       renderNew();
       container.querySelector("#cust").value = d.customerId;
       container.querySelector("#date").value = d.date;
+      container.querySelector("#dtime").value = d.time || "";
       const itemsDiv = container.querySelector("#items");
       itemsDiv.innerHTML = "";
       (d.items || []).forEach((it) => itemsDiv.appendChild(itemRow(it)));
@@ -593,7 +601,7 @@
       if (list.length === 0) { container.innerHTML = "<p class='muted'>No deliveries yet.</p>"; return; }
       container.innerHTML = list.map((d) =>
         `<div class="card">` +
-        `<strong>${A.esc(A.customerName(d.customerId))}</strong> — ${d.date}<br/>` +
+        `<strong>${A.esc(A.customerName(d.customerId))}</strong> — ${d.date}${d.time ? " " + A.esc(d.time) : ""}<br/>` +
         `<span class="muted">${itemSummary(d, sizes)}</span><br/>` +
         `Revenue: €${KO.formatMoney(KO.deliveryRevenue(d, sizes))}` +
         ((d.empties || []).length ? ` · Empties back: ${emptiesSummary(d, sizes)}` : "") +
@@ -830,12 +838,16 @@
       const d = new Date(); const off = d.getTimezoneOffset();
       return new Date(d.getTime() - off * 60000).toISOString().slice(0, 10);
     }
+    function nowTime() {
+      const d = new Date();
+      return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+    }
     function stRow(st, periods, sizes) {
       const countsStr = sizes.map((s) => `${A.esc(s.label)}: ${(st.counts && st.counts[s.id]) || 0}`).join(" · ");
-      const period = periods.find((p) => p.toDate === st.date);
+      const period = periods.find((p) => p.toId === st.id);
       const consStr = period ? " · consumed " + sizes.map((s) => `${A.esc(s.label)}: ${period.consumed[s.id] || 0}`).join(" · ") : "";
       return `<div class="row" style="justify-content:space-between"><div>` +
-        `<strong>${A.esc(st.date)}</strong> — ${countsStr}<span class="muted">${consStr}</span></div>` +
+        `<strong>${A.esc(st.date)}${st.time ? " " + A.esc(st.time) : ""}</strong> — ${countsStr}<span class="muted">${consStr}</span></div>` +
         `<button class="link" data-delst="${st.id}">Delete</button></div>`;
     }
 
@@ -859,6 +871,7 @@
         `<div style="flex:0 0 74px"><label>270 ml</label><input class="cv-count" type="number" min="0" value="${c.count270 != null ? c.count270 : ""}"/></div>` +
         `<div style="flex:0 0 66px"><label>1 L used</label><input class="cv-used" type="number" min="0" value="${c.used1L != null ? c.used1L : ""}"/></div>` +
         `<div><label>Date</label><input class="cv-date" type="date" value="${A.esc(c.date || "")}"/></div>` +
+        `<div><label>Time</label><input class="cv-time" type="time" value="${A.esc(c.time || (c.date ? "" : nowTime()))}"/></div>` +
         `<button class="link cv-del" style="flex:0 0 28px">✕</button></div>`;
     }
 
@@ -872,7 +885,8 @@
         `<div><label>Date</label><input id="bDate2" type="date" value="${A.esc(s2.date || "")}"/></div></div>` +
         `<h4>3 · Polsinelli 70 L</h4><label>Date</label><input id="bDate3" type="date" value="${A.esc(s3.date || "")}"/>` +
         `<h4>4 · Bottling</h4><div class="row"><div><label>1 L bottles</label><input id="bBottles" type="number" min="0" value="${s4.bottles1L != null ? s4.bottles1L : ""}"/></div>` +
-        `<div><label>Date</label><input id="bDate4" type="date" value="${A.esc(s4.date || "")}"/></div></div>` +
+        `<div><label>Date</label><input id="bDate4" type="date" value="${A.esc(s4.date || "")}"/></div>` +
+        `<div><label>Time</label><input id="bTime4" type="time" value="${A.esc(s4.time || (s4.date ? "" : nowTime()))}"/></div></div>` +
         `<h4>270 ml conversions</h4><div id="bConvs">${convs.map(convRowHtml).join("")}</div>` +
         `<button class="link" id="bAddConv">➕ Add conversion</button>` +
         `<p id="bMsg" class="muted"></p>` +
@@ -887,13 +901,13 @@
         const count270 = parseInt(r.querySelector(".cv-count").value, 10) || 0;
         const used1L = parseInt(r.querySelector(".cv-used").value, 10) || 0;
         const date = r.querySelector(".cv-date").value;
-        if (date && count270 > 0) convs.push({ count270, used1L, date });
+        if (date && count270 > 0) convs.push({ count270, used1L, date, time: r.querySelector(".cv-time").value });
       });
       return {
         step1: { waterLiters: numOr0("#bWater"), date: val("#bDate1") },
         step2: { jars: numOr0("#bJars"), date: val("#bDate2") },
         step3: { date: val("#bDate3") },
-        step4: { bottles1L: numOr0("#bBottles"), date: val("#bDate4") },
+        step4: { bottles1L: numOr0("#bBottles"), date: val("#bDate4"), time: val("#bTime4") },
         conversions: convs,
       };
     }
@@ -936,7 +950,8 @@
         `<div class="card"><h4>Record stocktake</h4>` +
           `<p class="muted">Count the sellable bottles on the sill per size and save. Consumption is reconciled against your previous stocktake.</p>` +
           sizes.map((s) => `<div class="row"><div><label>${A.esc(s.label)}</label><input class="st-count" data-size="${s.id}" type="number" min="0" value=""/></div></div>`).join("") +
-          `<label>Date</label><input id="stDate" type="date" value="${todayStr()}"/>` +
+          `<div class="row"><div><label>Date</label><input id="stDate" type="date" value="${todayStr()}"/></div>` +
+          `<div><label>Time</label><input id="stTime" type="time" value="${nowTime()}"/></div></div>` +
           `<p id="stMsg" class="muted"></p>` +
           `<button class="primary" id="stSave">Save stocktake</button></div>` +
         `<div class="card"><h4>Stocktakes &amp; consumption</h4>` +
@@ -998,13 +1013,14 @@
       const stSave = container.querySelector("#stSave");
       if (stSave) stSave.addEventListener("click", async () => {
         const date = container.querySelector("#stDate").value;
+        const time = container.querySelector("#stTime").value;
         const setMsg = (t) => { const m = container.querySelector("#stMsg"); if (m) m.textContent = t; };
         if (!date) { setMsg("Choose a date."); return; }
         const counts = {};
         container.querySelectorAll(".st-count").forEach((i) => { counts[i.dataset.size] = parseInt(i.value, 10) || 0; });
         stSave.disabled = true; setMsg("Saving…");
         try {
-          await A.addStocktake({ date, counts, createdAt: A.serverTimestamp() });
+          await A.addStocktake({ date, time, counts, createdAt: A.serverTimestamp() });
           const m = container.querySelector("#stMsg"); if (m) m.textContent = "Saved ✓";
         } catch (ex) {
           const m = container.querySelector("#stMsg"); if (m) m.textContent = "Save failed: " + (ex.code || ex.message);

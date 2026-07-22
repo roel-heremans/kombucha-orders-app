@@ -844,7 +844,7 @@
     }
     function stRow(st, periods, sizes) {
       const countsStr = sizes.map((s) => `${A.esc(s.label)}: ${(st.counts && st.counts[s.id]) || 0}`).join(" · ");
-      const period = periods.find((p) => p.toMoment === KO.actionMoment(st));
+      const period = periods.find((p) => p.toId === st.id);
       const consStr = period ? " · consumed " + sizes.map((s) => `${A.esc(s.label)}: ${period.consumed[s.id] || 0}`).join(" · ") : "";
       return `<div class="row" style="justify-content:space-between"><div>` +
         `<strong>${A.esc(st.date)}${st.time ? " " + A.esc(st.time) : ""}</strong> — ${countsStr}<span class="muted">${consStr}</span></div>` +

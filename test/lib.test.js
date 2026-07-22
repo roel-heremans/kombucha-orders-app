@@ -504,8 +504,8 @@ test("lastOrderItems returns [] for unknown uid, only-cancelled, or empty", () =
 });
 
 const STOCKTAKES = [
-  { date: "2026-06-01", counts: { "1L": 20, "270ml": 5 } },
-  { date: "2026-07-01", counts: { "1L": 40, "270ml": 8 } },
+  { id: "s1", date: "2026-06-01", counts: { "1L": 20, "270ml": 5 } },
+  { id: "s2", date: "2026-07-01", counts: { "1L": 40, "270ml": 8 } },
 ];
 const PROD_DELIVS = [
   { date: "2026-06-20", items: [{ sizeId: "1L", flavourId: "x", quantity: 10 }] },
@@ -540,7 +540,7 @@ test("consumptionPeriods reconciles expected − actual per interval; [] for <2"
   const periods = KO.consumptionPeriods(STOCKTAKES, BATCHES, PROD_DELIVS);
   assert.strictEqual(periods.length, 1);
   assert.deepStrictEqual(periods[0], {
-    fromDate: "2026-06-01", toDate: "2026-07-01", toMoment: "2026-07-01T00:00",
+    fromDate: "2026-06-01", toDate: "2026-07-01", toMoment: "2026-07-01T00:00", toId: "s2",
     consumed: { "1L": 21, "270ml": 2 } });
 });
 
@@ -577,6 +577,15 @@ test("reconciliation orders same-day actions by time", () => {
   assert.deepStrictEqual(KO.consumptionPeriods(sts, [], before)[0].consumed, { "1L": -5, "270ml": 0 }); // 10−3 expected=7, counted 12 → −5
   const after = [{ date: "2026-08-01", time: "20:00", items: [{ sizeId: "1L", quantity: 3 }] }];       // after the 18:00 count
   assert.deepStrictEqual(KO.consumptionPeriods(sts, [], after)[0].consumed, { "1L": -2, "270ml": 0 });  // delivery excluded → 10, counted 12 → −2
+});
+
+test("consumptionPeriods tags each period with its ending stocktake id (unique even at same moment)", () => {
+  const sts = [
+    { id: "a", date: "2026-09-01", time: "10:00", counts: { "1L": 5 } },
+    { id: "b", date: "2026-09-01", time: "10:00", counts: { "1L": 5 } }, // same moment as a
+    { id: "c", date: "2026-09-02", time: "10:00", counts: { "1L": 5 } },
+  ];
+  assert.deepStrictEqual(KO.consumptionPeriods(sts, [], []).map((p) => p.toId), ["b", "c"]);
 });
 
 test("whatsappOrderText builds new/delivered messages", () => {

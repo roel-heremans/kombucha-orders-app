@@ -366,7 +366,7 @@
         const expected = (pc[sid] || 0) + (produced[sid] || 0) - (delivered[sid] || 0);
         consumed[sid] = expected - (cc[sid] || 0);
       });
-      periods.push({ fromDate: prev.date, toDate: cur.date, toMoment: actionMoment(cur), consumed: consumed });
+      periods.push({ fromDate: prev.date, toDate: cur.date, toMoment: actionMoment(cur), toId: cur.id, consumed: consumed });
     }
     return periods;
   }

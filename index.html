@@ -439,6 +439,7 @@
       return {
         customerId: container.querySelector("#cust").value,
         date: container.querySelector("#date").value,
+        time: container.querySelector("#dtime").value,
         items, empties,
         note: container.querySelector("#note").value.trim(),
       };
@@ -450,13 +451,19 @@
       return new Date(d.getTime() - off * 60000).toISOString().slice(0, 10);
     }
 
+    function nowTime() {
+      const d = new Date();
+      return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+    }
+
     function buildForm() {
       container.innerHTML =
         `<div class="card">` +
         `<h3>${editing ? "Edit" : fulfilling ? "Fulfil order" : "New"} delivery</h3>` +
         (fulfilling && !editing ? `<p class="muted">Fulfilling a requested order — saving will mark it delivered.</p>` : "") +
         `<label>Customer</label><select id="cust">${customerOptionsHtml("")}</select>` +
-        `<label>Date</label><input id="date" type="date" value="${todayStr()}"/>` +
+        `<div class="row"><div><label>Date</label><input id="date" type="date" value="${todayStr()}"/></div>` +
+        `<div><label>Time</label><input id="dtime" type="time" value="${nowTime()}"/></div></div>` +
         `<h4>Bottles delivered</h4><div id="items"></div>` +
         `<button class="link" id="addItem">➕ Add line</button>` +
         `<h4>Empties received back</h4>${emptiesRows()}` +
@@ -533,6 +540,7 @@
       renderNew();
       container.querySelector("#cust").value = d.customerId;
       container.querySelector("#date").value = d.date;
+      container.querySelector("#dtime").value = d.time || "";
       const itemsDiv = container.querySelector("#items");
       itemsDiv.innerHTML = "";
       (d.items || []).forEach((it) => itemsDiv.appendChild(itemRow(it)));
@@ -593,7 +601,7 @@
       if (list.length === 0) { container.innerHTML = "<p class='muted'>No deliveries yet.</p>"; return; }
       container.innerHTML = list.map((d) =>
         `<div class="card">` +
-        `<strong>${A.esc(A.customerName(d.customerId))}</strong> — ${d.date}<br/>` +
+        `<strong>${A.esc(A.customerName(d.customerId))}</strong> — ${d.date}${d.time ? " " + A.esc(d.time) : ""}<br/>` +
         `<span class="muted">${itemSummary(d, sizes)}</span><br/>` +
         `Revenue: €${KO.formatMoney(KO.deliveryRevenue(d, sizes))}` +
         ((d.empties || []).length ? ` · Empties back: ${emptiesSummary(d, sizes)}` : "") +

@@ -297,34 +297,39 @@
     return { bottled1L: bottled1L, made270: made270, used1L: used1L };
   }
 
-  function producedPerSize(batches, afterDate, throughDate) {
-    const inR = function (d) { return d && (!afterDate || d > afterDate) && (!throughDate || d <= throughDate); };
+  function actionMoment(rec) {
+    return rec && rec.date ? rec.date + "T" + (rec.time || "00:00") : "";
+  }
+
+  function producedPerSize(batches, afterMoment, throughMoment) {
+    const inR = function (m) { return m && (!afterMoment || m > afterMoment) && (!throughMoment || m <= throughMoment); };
     let n1L = 0, made270 = 0;
     (batches || []).forEach(function (b) {
-      if (b && b.step4 && inR(b.step4.date)) n1L += b.step4.bottles1L || 0;
+      if (b && b.step4 && inR(actionMoment(b.step4))) n1L += b.step4.bottles1L || 0;
       ((b && b.conversions) || []).forEach(function (c) {
-        if (c && inR(c.date)) { n1L -= c.used1L || 0; made270 += c.count270 || 0; }
+        if (c && inR(actionMoment(c))) { n1L -= c.used1L || 0; made270 += c.count270 || 0; }
       });
     });
     return { "1L": n1L, "270ml": made270 };
   }
 
-  function deliveredPerSize(deliveries, afterDate, throughDate) {
-    const inR = function (d) { return d && (!afterDate || d > afterDate) && (!throughDate || d <= throughDate); };
+  function deliveredPerSize(deliveries, afterMoment, throughMoment) {
+    const inR = function (m) { return m && (!afterMoment || m > afterMoment) && (!throughMoment || m <= throughMoment); };
     const by = {};
     (deliveries || []).forEach(function (dv) {
-      if (!inR(dv.date)) return;
+      if (!inR(actionMoment(dv))) return;
       (dv.items || []).forEach(function (it) { by[it.sizeId] = (by[it.sizeId] || 0) + (it.quantity || 0); });
     });
     return by;
   }
 
-  function latestStocktake(stocktakes, asOfDate) {
-    let best = null;
+  function latestStocktake(stocktakes, asOfMoment) {
+    let best = null, bestM = "";
     (stocktakes || []).forEach(function (s) {
-      if (!s || !s.date) return;
-      if (asOfDate && s.date > asOfDate) return;
-      if (!best || s.date > best.date) best = s;
+      const m = actionMoment(s);
+      if (!m) return;
+      if (asOfMoment && m > asOfMoment) return;
+      if (!best || m > bestM) { best = s; bestM = m; }
     });
     return best;
   }
@@ -332,8 +337,9 @@
   function availableToSell(stocktakes, batches, deliveries) {
     const base = latestStocktake(stocktakes, null);
     if (!base) return null;
-    const produced = producedPerSize(batches, base.date, null);
-    const delivered = deliveredPerSize(deliveries, base.date, null);
+    const baseM = actionMoment(base);
+    const produced = producedPerSize(batches, baseM, null);
+    const delivered = deliveredPerSize(deliveries, baseM, null);
     const counts = base.counts || {};
     const keys = {};
     [counts, produced, delivered].forEach(function (m) { Object.keys(m).forEach(function (k) { keys[k] = true; }); });
@@ -346,12 +352,12 @@
 
   function consumptionPeriods(stocktakes, batches, deliveries) {
     const sorted = (stocktakes || []).filter(function (s) { return s && s.date; })
-      .slice().sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+      .slice().sort(function (a, b) { const ma = actionMoment(a), mb = actionMoment(b); return ma < mb ? -1 : ma > mb ? 1 : 0; });
     const periods = [];
     for (let i = 1; i < sorted.length; i++) {
       const prev = sorted[i - 1], cur = sorted[i];
-      const produced = producedPerSize(batches, prev.date, cur.date);
-      const delivered = deliveredPerSize(deliveries, prev.date, cur.date);
+      const produced = producedPerSize(batches, actionMoment(prev), actionMoment(cur));
+      const delivered = deliveredPerSize(deliveries, actionMoment(prev), actionMoment(cur));
       const pc = prev.counts || {}, cc = cur.counts || {};
       const keys = {};
       [pc, cc, produced, delivered].forEach(function (m) { Object.keys(m).forEach(function (k) { keys[k] = true; }); });
@@ -360,7 +366,7 @@
         const expected = (pc[sid] || 0) + (produced[sid] || 0) - (delivered[sid] || 0);
         consumed[sid] = expected - (cc[sid] || 0);
       });
-      periods.push({ fromDate: prev.date, toDate: cur.date, consumed: consumed });
+      periods.push({ fromDate: prev.date, toDate: cur.date, toMoment: actionMoment(cur), consumed: consumed });
     }
     return periods;
   }
@@ -617,5 +623,5 @@
     });
   }
 
-  return { formatMoney, sizeById, deliveryRevenue, deliveryDepositRefund, monthKey, inMonth, monthName, dayOfMonth, recentMonthKeys, resolveWindow, monthKeysBetween, inWindow, revenueInWindow, revenueByCustomerInWindow, flavourCountsInWindow, windowLabel, monthlyRevenue, revenueByCustomer, monthlyRevenueSeries, flavourCounts, revenueByCustomerType, outstandingByCustomer, reciboSizeLabel, reciboDocId, nextBatchNumber, formatBatchNumber, bottles1LForConversion, sizeLiters, soldLitersInWindow, productionSummary, producedPerSize, deliveredPerSize, latestStocktake, availableToSell, consumptionPeriods, sumConsumption, generateRecibo, orderItemsSummary, orderEmailParams, whatsappOrderText, lastOrderItems, lastDeliveryItems, orderStatusLabel, loginEmail, barChartSVG, stackedBarChartSVG, revenueByTypeInWindow, revenueTypeSeries, revenueTypeByYear, t };
+  return { formatMoney, sizeById, deliveryRevenue, deliveryDepositRefund, monthKey, inMonth, monthName, dayOfMonth, recentMonthKeys, resolveWindow, monthKeysBetween, inWindow, revenueInWindow, revenueByCustomerInWindow, flavourCountsInWindow, windowLabel, monthlyRevenue, revenueByCustomer, monthlyRevenueSeries, flavourCounts, revenueByCustomerType, outstandingByCustomer, reciboSizeLabel, reciboDocId, nextBatchNumber, formatBatchNumber, bottles1LForConversion, sizeLiters, soldLitersInWindow, productionSummary, actionMoment, producedPerSize, deliveredPerSize, latestStocktake, availableToSell, consumptionPeriods, sumConsumption, generateRecibo, orderItemsSummary, orderEmailParams, whatsappOrderText, lastOrderItems, lastDeliveryItems, orderStatusLabel, loginEmail, barChartSVG, stackedBarChartSVG, revenueByTypeInWindow, revenueTypeSeries, revenueTypeByYear, t };
 });

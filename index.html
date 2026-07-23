@@ -272,6 +272,14 @@
     // CRUD
     window.APP.addDelivery = (o) => addDoc(collection(db, "deliveries"), o);
     window.APP.updateDelivery = (id, o) => updateDoc(doc(db, "deliveries", id), o);
+    window.APP.setDeliveryPaid = (id, paid) => updateDoc(doc(db, "deliveries", id), { paid });
+    window.APP.setDeliveriesPaid = async (ids, paid) => {
+      for (let i = 0; i < ids.length; i += 400) {
+        const b = writeBatch(db);
+        ids.slice(i, i + 400).forEach((id) => b.update(doc(db, "deliveries", id), { paid }));
+        await b.commit();
+      }
+    };
     window.APP.deleteDelivery = (id) => deleteDoc(doc(db, "deliveries", id));
     window.APP.addCustomer = (name, notes) => addDoc(collection(db, "customers"), { name, notes: notes || "" });
     window.APP.updateCustomer = (id, o) => updateDoc(doc(db, "customers", id), o);
@@ -485,6 +493,7 @@
         time: container.querySelector("#dtime").value,
         items, empties,
         note: container.querySelector("#note").value.trim(),
+        paid: container.querySelector("#dpaid").checked,
       };
     }
 
@@ -511,6 +520,7 @@
         `<button class="link" id="addItem">➕ Add line</button>` +
         `<h4>Empties received back</h4>${emptiesRows()}` +
         `<label>Note (optional)</label><textarea id="note" rows="2"></textarea>` +
+        `<label style="display:flex;align-items:center;gap:8px;font-weight:normal"><input type="checkbox" id="dpaid" style="width:auto"/> Paid (payment already received)</label>` +
         `<p><strong>Subtotal: €<span id="subtotal">0.00</span></strong></p>` +
         `<p id="formErr" class="muted"></p>` +
         `<button class="primary" id="save">${editing ? "Update" : "Save"} delivery</button>` +
@@ -593,6 +603,7 @@
         if (inp) inp.value = emp.quantity;
       });
       container.querySelector("#note").value = d.note || "";
+      container.querySelector("#dpaid").checked = !!d.paid;
       updateSubtotal();
       document.querySelector('nav button[data-view="new"]').click();
     };

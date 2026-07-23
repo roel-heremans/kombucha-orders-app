@@ -27,6 +27,33 @@
     }, 0);
   }
 
+  function openPayments(deliveries, sizes) {
+    const byCust = {};
+    let grandTotal = 0;
+    (deliveries || []).forEach(function (d) {
+      if (d.paid) return;
+      const amount = deliveryRevenue(d, sizes);
+      if (amount <= 0) return;
+      grandTotal += amount;
+      const cust = byCust[d.customerId] || (byCust[d.customerId] = { customerId: d.customerId, total: 0, monthsMap: {} });
+      cust.total += amount;
+      const mk = monthKey(d.date);
+      const mo = cust.monthsMap[mk] || (cust.monthsMap[mk] = { monthKey: mk, total: 0, items: [] });
+      mo.total += amount;
+      mo.items.push({ id: d.id, date: d.date, amount: amount });
+    });
+    const customers = Object.keys(byCust).sort().map(function (cid) {
+      const c = byCust[cid];
+      const months = Object.keys(c.monthsMap).sort().reverse().map(function (mk) {
+        const mo = c.monthsMap[mk];
+        mo.items.sort(function (a, b) { return a.date < b.date ? 1 : (a.date > b.date ? -1 : 0); });
+        return { monthKey: mo.monthKey, total: mo.total, items: mo.items };
+      });
+      return { customerId: c.customerId, total: c.total, months: months };
+    });
+    return { grandTotal: grandTotal, customers: customers };
+  }
+
   const MONTH_NAMES = ["January","February","March","April","May","June",
     "July","August","September","October","November","December"];
 
@@ -633,5 +660,5 @@
     });
   }
 
-  return { formatMoney, sizeById, deliveryRevenue, deliveryDepositRefund, monthKey, inMonth, monthName, dayOfMonth, recentMonthKeys, resolveWindow, monthKeysBetween, inWindow, revenueInWindow, revenueByCustomerInWindow, flavourCountsInWindow, windowLabel, monthlyRevenue, revenueByCustomer, monthlyRevenueSeries, flavourCounts, revenueByCustomerType, outstandingByCustomer, reciboSizeLabel, reciboDocId, nextBatchNumber, formatBatchNumber, bottles1LForConversion, sizeLiters, soldLitersInWindow, productionSummary, actionMoment, producedPerSize, deliveredPerSize, latestStocktake, availableToSell, consumptionPeriods, sumConsumption, generateRecibo, orderItemsSummary, orderEmailParams, whatsappOrderText, lastOrderItems, lastDeliveryItems, orderStatusLabel, loginEmail, isRealEmail, customerEmailStatus, barChartSVG, stackedBarChartSVG, revenueByTypeInWindow, revenueTypeSeries, revenueTypeByYear, t };
+  return { formatMoney, sizeById, deliveryRevenue, deliveryDepositRefund, monthKey, inMonth, monthName, dayOfMonth, recentMonthKeys, resolveWindow, monthKeysBetween, inWindow, revenueInWindow, revenueByCustomerInWindow, flavourCountsInWindow, windowLabel, monthlyRevenue, revenueByCustomer, monthlyRevenueSeries, flavourCounts, revenueByCustomerType, outstandingByCustomer, openPayments, reciboSizeLabel, reciboDocId, nextBatchNumber, formatBatchNumber, bottles1LForConversion, sizeLiters, soldLitersInWindow, productionSummary, actionMoment, producedPerSize, deliveredPerSize, latestStocktake, availableToSell, consumptionPeriods, sumConsumption, generateRecibo, orderItemsSummary, orderEmailParams, whatsappOrderText, lastOrderItems, lastDeliveryItems, orderStatusLabel, loginEmail, isRealEmail, customerEmailStatus, barChartSVG, stackedBarChartSVG, revenueByTypeInWindow, revenueTypeSeries, revenueTypeByYear, t };
 });

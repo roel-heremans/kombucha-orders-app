@@ -612,3 +612,12 @@ test("loginEmail passes through addresses and synthesizes from a bare name", () 
   assert.strictEqual(KO.loginEmail("Koa Spot", "kombucha.app"), "koaspot@kombucha.app");
   assert.strictEqual(KO.loginEmail("  Sun Spot  ", "kombucha.app"), "sunspot@kombucha.app");
 });
+
+test("isRealEmail accepts real addresses and rejects synthetic name logins", () => {
+  assert.strictEqual(KO.isRealEmail("paula@palmspot.pt", "kombucha.app"), true);
+  assert.strictEqual(KO.isRealEmail("koa@kombucha.app", "kombucha.app"), false);
+  assert.strictEqual(KO.isRealEmail("Koa@Kombucha.App", "kombucha.app"), false); // case-insensitive
+  assert.strictEqual(KO.isRealEmail("", "kombucha.app"), false);
+  assert.strictEqual(KO.isRealEmail(null, "kombucha.app"), false);
+  assert.strictEqual(KO.isRealEmail("noatsign", "kombucha.app"), false);
+});

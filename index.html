@@ -65,6 +65,7 @@
       <button data-view="dashboard">Dashboard</button>
       <button data-view="production">Production</button>
       <button data-view="recibo">Recibo</button>
+      <button data-view="payments">Payments</button>
       <button data-view="settings">Settings</button>
     </nav>
     <main>
@@ -74,6 +75,7 @@
       <div id="view-dashboard" class="view hidden"></div>
       <div id="view-production" class="view hidden"></div>
       <div id="view-recibo" class="view hidden"></div>
+      <div id="view-payments" class="view hidden"></div>
       <div id="view-settings" class="view hidden"></div>
     </main>
   </div>
@@ -272,6 +274,14 @@
     // CRUD
     window.APP.addDelivery = (o) => addDoc(collection(db, "deliveries"), o);
     window.APP.updateDelivery = (id, o) => updateDoc(doc(db, "deliveries", id), o);
+    window.APP.setDeliveryPaid = (id, paid) => updateDoc(doc(db, "deliveries", id), { paid });
+    window.APP.setDeliveriesPaid = async (ids, paid) => {
+      for (let i = 0; i < ids.length; i += 400) {
+        const b = writeBatch(db);
+        ids.slice(i, i + 400).forEach((id) => b.update(doc(db, "deliveries", id), { paid }));
+        await b.commit();
+      }
+    };
     window.APP.deleteDelivery = (id) => deleteDoc(doc(db, "deliveries", id));
     window.APP.addCustomer = (name, notes) => addDoc(collection(db, "customers"), { name, notes: notes || "" });
     window.APP.updateCustomer = (id, o) => updateDoc(doc(db, "customers", id), o);
@@ -485,6 +495,7 @@
         time: container.querySelector("#dtime").value,
         items, empties,
         note: container.querySelector("#note").value.trim(),
+        paid: container.querySelector("#dpaid").checked,
       };
     }
 
@@ -511,6 +522,7 @@
         `<button class="link" id="addItem">➕ Add line</button>` +
         `<h4>Empties received back</h4>${emptiesRows()}` +
         `<label>Note (optional)</label><textarea id="note" rows="2"></textarea>` +
+        `<label style="display:flex;align-items:center;gap:8px;font-weight:normal"><input type="checkbox" id="dpaid" style="width:auto"/> Paid (payment already received)</label>` +
         `<p><strong>Subtotal: €<span id="subtotal">0.00</span></strong></p>` +
         `<p id="formErr" class="muted"></p>` +
         `<button class="primary" id="save">${editing ? "Update" : "Save"} delivery</button>` +
@@ -593,6 +605,7 @@
         if (inp) inp.value = emp.quantity;
       });
       container.querySelector("#note").value = d.note || "";
+      container.querySelector("#dpaid").checked = !!d.paid;
       updateSubtotal();
       document.querySelector('nav button[data-view="new"]').click();
     };
@@ -642,17 +655,28 @@
       const sizes = A.state.settings ? A.state.settings.sizes : [];
       const list = A.state.deliveries.slice().sort((a, b) => (a.date < b.date ? 1 : -1));
       if (list.length === 0) { container.innerHTML = "<p class='muted'>No deliveries yet.</p>"; return; }
-      container.innerHTML = list.map((d) =>
-        `<div class="card">` +
-        `<strong>${A.esc(A.customerName(d.customerId))}</strong> — ${d.date}${d.time ? " " + A.esc(d.time) : ""}<br/>` +
+      container.innerHTML = list.map((d) => {
+        const hasRevenue = KO.deliveryRevenue(d, sizes) > 0;
+        const paidBadge = hasRevenue
+          ? (d.paid ? `<span class="pill pill-ok">Paid ✓</span>` : `<span class="pill pill-muted">Unpaid</span>`)
+          : "";
+        return `<div class="card">` +
+        `<strong>${A.esc(A.customerName(d.customerId))}</strong> — ${d.date}${d.time ? " " + A.esc(d.time) : ""} ${paidBadge}<br/>` +
         `<span class="muted">${itemSummary(d, sizes)}</span><br/>` +
         `Revenue: €${KO.formatMoney(KO.deliveryRevenue(d, sizes))}` +
         ((d.empties || []).length ? ` · Empties back: ${emptiesSummary(d, sizes)}` : "") +
         `<div style="margin-top:8px">` +
+        (hasRevenue ? `<button class="link" data-togglepaid="${d.id}">${d.paid ? "Mark unpaid" : "Mark paid"}</button> · ` : "") +
         `<button class="link" data-edit="${d.id}">Edit</button> · ` +
         `<button class="link" data-del="${d.id}">Delete</button></div>` +
-        `</div>`).join("");
+        `</div>`;
+      }).join("");
 
+      container.querySelectorAll("[data-togglepaid]").forEach((b) =>
+        b.addEventListener("click", async () => {
+          const d = A.state.deliveries.find((x) => x.id === b.dataset.togglepaid);
+          await A.setDeliveryPaid(b.dataset.togglepaid, !(d && d.paid));
+        }));
       container.querySelectorAll("[data-edit]").forEach((b) =>
         b.addEventListener("click", () => A.editDelivery(b.dataset.edit)));
       container.querySelectorAll("[data-del]").forEach((b) =>
@@ -662,6 +686,72 @@
     }
 
     A.renderers.deliveries = render;
+  });
+  </script>
+
+  <script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const A = window.APP, KO = window.KO;
+    const container = document.getElementById("view-payments");
+
+    function yesterdayStr() {
+      const d = new Date();
+      const off = d.getTimezoneOffset();
+      return new Date(d.getTime() - off * 60000 - 86400000).toISOString().slice(0, 10);
+    }
+
+    function render() {
+      const sizes = A.state.settings ? A.state.settings.sizes : [];
+      const data = KO.openPayments(A.state.deliveries, sizes);
+      const custs = data.customers.slice().sort((a, b) =>
+        A.customerName(a.customerId).localeCompare(A.customerName(b.customerId)));
+
+      let html = `<div class="card"><h3>Open payments</h3>` +
+        `<p><strong>Total owed: €${KO.formatMoney(data.grandTotal)}</strong></p>` +
+        `<div class="row" style="align-items:flex-end">` +
+        `<div><label>Settle all unpaid up to</label><input id="cutoffDate" type="date" value="${yesterdayStr()}"/></div>` +
+        `<button class="link" id="settleCutoff" style="flex:0 0 auto">Mark paid</button></div>` +
+        `</div>`;
+
+      if (!custs.length) {
+        html += `<div class="card"><p class="muted">All caught up — nothing unpaid.</p></div>`;
+      } else {
+        html += custs.map((c) =>
+          `<div class="card"><strong>${A.esc(A.customerName(c.customerId))}</strong> — €${KO.formatMoney(c.total)}` +
+          c.months.map((m) =>
+            `<div style="border-top:1px solid var(--line);margin-top:8px;padding-top:8px">` +
+            `<div class="row"><div><strong>${KO.monthName(m.monthKey)} ${m.monthKey.slice(0, 4)}</strong> — €${KO.formatMoney(m.total)}</div>` +
+            `<button class="link" data-monthpaid="${c.customerId}|${m.monthKey}" style="flex:0 0 auto">Mark month paid</button></div>` +
+            m.items.map((it) =>
+              `<div class="row"><div class="muted">${it.date} — €${KO.formatMoney(it.amount)}</div>` +
+              `<button class="link" data-delivpaid="${it.id}" style="flex:0 0 auto">Mark paid</button></div>`).join("") +
+            `</div>`).join("") +
+          `</div>`).join("");
+      }
+      container.innerHTML = html;
+
+      const settleBtn = container.querySelector("#settleCutoff");
+      if (settleBtn) settleBtn.addEventListener("click", async () => {
+        const cutoff = container.querySelector("#cutoffDate").value;
+        if (!cutoff) return;
+        const ids = A.state.deliveries.filter((d) => !d.paid && d.date <= cutoff).map((d) => d.id);
+        if (!ids.length) { alert("No unpaid deliveries up to " + cutoff + "."); return; }
+        if (confirm("Mark " + ids.length + " delivery(ies) up to " + cutoff + " as paid?")) {
+          await A.setDeliveriesPaid(ids, true);
+        }
+      });
+      container.querySelectorAll("[data-delivpaid]").forEach((b) =>
+        b.addEventListener("click", async () => { await A.setDeliveryPaid(b.dataset.delivpaid, true); }));
+      container.querySelectorAll("[data-monthpaid]").forEach((b) =>
+        b.addEventListener("click", async () => {
+          const parts = b.dataset.monthpaid.split("|");
+          const cust = data.customers.find((x) => x.customerId === parts[0]);
+          const mo = cust && cust.months.find((x) => x.monthKey === parts[1]);
+          if (mo) await A.setDeliveriesPaid(mo.items.map((it) => it.id), true);
+        }));
+    }
+
+    A.renderers.payments = render;
   });
   </script>
 

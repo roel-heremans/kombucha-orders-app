@@ -628,3 +628,27 @@ test("customerEmailStatus classifies login/email state", () => {
   assert.strictEqual(KO.customerEmailStatus({ email: "x@y.pt" }, "kombucha.app"), "none"); // no uid = no login
   assert.strictEqual(KO.customerEmailStatus(null, "kombucha.app"), "none");
 });
+
+test("openPayments groups unpaid deliveries by customer and month", () => {
+  const sizes = [{ id: "1L", label: "1 L", price: 8, deposit: 0 }];
+  const delivs = [
+    { id: "d1", customerId: "A", date: "2026-06-03", items: [{ sizeId: "1L", quantity: 2 }] },              // unpaid 16
+    { id: "d2", customerId: "A", date: "2026-07-10", items: [{ sizeId: "1L", quantity: 1 }] },              // unpaid 8
+    { id: "d3", customerId: "A", date: "2026-07-20", items: [{ sizeId: "1L", quantity: 3 }], paid: true },  // paid -> excluded
+    { id: "d4", customerId: "B", date: "2026-07-05", items: [{ sizeId: "1L", quantity: 1 }] },              // unpaid 8
+    { id: "d5", customerId: "B", date: "2026-07-06", items: [], empties: [] },                              // 0 revenue -> excluded
+  ];
+  const r = KO.openPayments(delivs, sizes);
+  assert.strictEqual(r.grandTotal, 32);
+  assert.strictEqual(r.customers.length, 2);
+  const cA = r.customers.find((c) => c.customerId === "A");
+  assert.strictEqual(cA.total, 24);
+  assert.strictEqual(cA.months.length, 2);
+  assert.strictEqual(cA.months[0].monthKey, "2026-07"); // newest first
+  assert.strictEqual(cA.months[0].total, 8);
+  assert.strictEqual(cA.months[1].monthKey, "2026-06");
+  assert.strictEqual(cA.months[1].items[0].id, "d1");
+  const cB = r.customers.find((c) => c.customerId === "B");
+  assert.strictEqual(cB.total, 8);
+  assert.strictEqual(cB.months.length, 1);
+});

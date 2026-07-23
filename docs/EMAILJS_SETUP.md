@@ -40,7 +40,11 @@ the recibo details and a pointer to the app's download section. This uses a
 1. In EmailJS, create a new Email Template.
 2. Set **To Email** to `{{to_email}}`.
 3. Set the **Subject** to: `Novo recibo verde / New recibo — Real Health Kombucha`
-4. Set the **Content** to (Portuguese first, then English):
+4. Set **From Name** to the static text `Real Health Kombucha` (NOT `{{name}}` —
+   `{{name}}` is the customer's name, which would make the email look like it came
+   from the recipient and hurts deliverability).
+5. Set **Reply To** to a real address you monitor (e.g. `roel.heremans@gmail.com`).
+6. Set the **Content** to (Portuguese first, then English):
 
    ```
    Caro(a) {{name}},
@@ -80,9 +84,23 @@ the recibo details and a pointer to the app's download section. This uses a
    Real Health Kombucha
    ```
 
-5. Note the template's **Template ID** and put it in `index.html` as
+7. Note the template's **Template ID** and put it in `index.html` as
    `EMAILJS_RECIBO_TEMPLATE`. Leave it empty to keep the feature off.
 
 Only customers who log in with a **real email** receive this. Name-based logins
 (`…@kombucha.app`) have no inbox and are skipped — the upload screen tells you to
-send those manually.
+send those manually. In the admin **Settings → Customers** card, a badge shows
+which customers have a real email (green `✉ …`) vs. name logins (`no email`).
+
+### Deliverability (staying out of spam)
+
+Recibo emails go to external mailboxes that may not know the sender yet, so they
+can land in spam. Order-notification emails don't have this problem because they
+go to your own inbox. To improve inbox placement:
+
+- **From Name** static `Real Health Kombucha` and a real **Reply To** (steps 4–5
+  above) — the biggest easy wins.
+- Ask each restaurant to mark the first email **"Not spam"** / add the sender to
+  contacts once; afterwards their mail lands in the inbox.
+- Best long-term: connect a **custom domain** as the EmailJS sending service and
+  add **SPF + DKIM + DMARC** DNS records for it.

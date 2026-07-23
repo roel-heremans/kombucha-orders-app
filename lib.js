@@ -502,6 +502,11 @@
     return s.indexOf("@") !== -1 ? s : s.replace(/\s+/g, "") + "@" + domain;
   }
 
+  function isRealEmail(email, syntheticDomain) {
+    const s = String(email == null ? "" : email).trim().toLowerCase();
+    return s.indexOf("@") !== -1 && !s.endsWith("@" + String(syntheticDomain).toLowerCase());
+  }
+
   function escapeXml(s) {
     return String(s).replace(/[<>&'"]/g, function (c) {
       return { "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" }[c];
@@ -623,5 +628,5 @@
     });
   }
 
-  return { formatMoney, sizeById, deliveryRevenue, deliveryDepositRefund, monthKey, inMonth, monthName, dayOfMonth, recentMonthKeys, resolveWindow, monthKeysBetween, inWindow, revenueInWindow, revenueByCustomerInWindow, flavourCountsInWindow, windowLabel, monthlyRevenue, revenueByCustomer, monthlyRevenueSeries, flavourCounts, revenueByCustomerType, outstandingByCustomer, reciboSizeLabel, reciboDocId, nextBatchNumber, formatBatchNumber, bottles1LForConversion, sizeLiters, soldLitersInWindow, productionSummary, actionMoment, producedPerSize, deliveredPerSize, latestStocktake, availableToSell, consumptionPeriods, sumConsumption, generateRecibo, orderItemsSummary, orderEmailParams, whatsappOrderText, lastOrderItems, lastDeliveryItems, orderStatusLabel, loginEmail, barChartSVG, stackedBarChartSVG, revenueByTypeInWindow, revenueTypeSeries, revenueTypeByYear, t };
+  return { formatMoney, sizeById, deliveryRevenue, deliveryDepositRefund, monthKey, inMonth, monthName, dayOfMonth, recentMonthKeys, resolveWindow, monthKeysBetween, inWindow, revenueInWindow, revenueByCustomerInWindow, flavourCountsInWindow, windowLabel, monthlyRevenue, revenueByCustomer, monthlyRevenueSeries, flavourCounts, revenueByCustomerType, outstandingByCustomer, reciboSizeLabel, reciboDocId, nextBatchNumber, formatBatchNumber, bottles1LForConversion, sizeLiters, soldLitersInWindow, productionSummary, actionMoment, producedPerSize, deliveredPerSize, latestStocktake, availableToSell, consumptionPeriods, sumConsumption, generateRecibo, orderItemsSummary, orderEmailParams, whatsappOrderText, lastOrderItems, lastDeliveryItems, orderStatusLabel, loginEmail, isRealEmail, barChartSVG, stackedBarChartSVG, revenueByTypeInWindow, revenueTypeSeries, revenueTypeByYear, t };
 });

@@ -105,6 +105,7 @@
 
     // Optional new-order email alerts (see docs/EMAILJS_SETUP.md). Empty = disabled.
     const EMAILJS_CONFIG = { serviceId: "service_o9ospkv", templateId: "template_flxfpn9", publicKey: "xA2Pc69R2LtlXm0Rm" };
+    const EMAILJS_RECIBO_TEMPLATE = "template_37xzu1n"; // new template for recibo-upload emails; empty = disabled
 
     // Optional WhatsApp alerts via CallMeBot (see docs/CALLMEBOT_SETUP.md). Empty phone/apikey = skipped.
     const CALLMEBOT_RECIPIENTS = [
@@ -317,6 +318,26 @@
         if (!res.ok) console.warn("notifyNewOrder: EmailJS HTTP", res.status);
       } catch (e) {
         console.warn("notifyNewOrder failed:", e);
+      }
+    };
+
+    window.APP.emailRecibo = async function (params) {
+      const c = EMAILJS_CONFIG;
+      if (!c.serviceId || !c.publicKey || !EMAILJS_RECIBO_TEMPLATE) return; // disabled until configured
+      try {
+        const res = await fetch("https://api.emailjs.com/api/v1.0/email/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            service_id: c.serviceId,
+            template_id: EMAILJS_RECIBO_TEMPLATE,
+            user_id: c.publicKey,
+            template_params: params || {},
+          }),
+        });
+        if (!res.ok) console.warn("emailRecibo: EmailJS HTTP", res.status);
+      } catch (e) {
+        console.warn("emailRecibo failed:", e);
       }
     };
 
@@ -1136,7 +1157,18 @@
             return;
           }
           await A.uploadRecibo(custId, cust.uid, mk, file.name, file.size, base64, A.user ? A.user.email : "");
-          const m = container.querySelector("#ruMsg"); if (m) m.textContent = "Uploaded ✓";
+          let msg = "Uploaded ✓";
+          if (KO.isRealEmail(cust.email, LOGIN_NAME_DOMAIN)) {
+            A.emailRecibo({
+              name: cust.name,
+              to_email: cust.email,
+              recibo_text: KO.generateRecibo(A.state.deliveries, custId, mk, A.state.settings.sizes, A.state.settings.reciboHeader, cust.nif),
+            });
+            msg = "Uploaded ✓ — emailed " + cust.email;
+          } else {
+            msg = "Uploaded ✓ — no email on file; send it manually.";
+          }
+          const m = container.querySelector("#ruMsg"); if (m) m.textContent = msg;
         } catch (ex) {
           const m = container.querySelector("#ruMsg"); if (m) m.textContent = "Upload failed: " + (ex.code || ex.message);
           const b = container.querySelector("#ruUpload"); if (b) b.disabled = false;

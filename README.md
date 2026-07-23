@@ -51,6 +51,8 @@ WhatsApp alerts (new order + delivered) can also be sent to Roel + Nina via
 CallMeBot (client-side). See [`docs/CALLMEBOT_SETUP.md`](docs/CALLMEBOT_SETUP.md)
 for setup; the feature is off until configured.
 
+When an admin uploads a Recibo Verde PDF, the app can also email the restaurant with the recibo details; see [`docs/EMAILJS_SETUP.md`](docs/EMAILJS_SETUP.md) for template setup.
+
 ## Bottle sizes & pricing (defaults, editable in Settings)
 
 | Size   | Sale price | Deposit |

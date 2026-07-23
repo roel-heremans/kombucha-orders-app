@@ -653,17 +653,28 @@
       const sizes = A.state.settings ? A.state.settings.sizes : [];
       const list = A.state.deliveries.slice().sort((a, b) => (a.date < b.date ? 1 : -1));
       if (list.length === 0) { container.innerHTML = "<p class='muted'>No deliveries yet.</p>"; return; }
-      container.innerHTML = list.map((d) =>
-        `<div class="card">` +
-        `<strong>${A.esc(A.customerName(d.customerId))}</strong> — ${d.date}${d.time ? " " + A.esc(d.time) : ""}<br/>` +
+      container.innerHTML = list.map((d) => {
+        const hasRevenue = KO.deliveryRevenue(d, sizes) > 0;
+        const paidBadge = hasRevenue
+          ? (d.paid ? `<span class="pill pill-ok">Paid ✓</span>` : `<span class="pill pill-muted">Unpaid</span>`)
+          : "";
+        return `<div class="card">` +
+        `<strong>${A.esc(A.customerName(d.customerId))}</strong> — ${d.date}${d.time ? " " + A.esc(d.time) : ""} ${paidBadge}<br/>` +
         `<span class="muted">${itemSummary(d, sizes)}</span><br/>` +
         `Revenue: €${KO.formatMoney(KO.deliveryRevenue(d, sizes))}` +
         ((d.empties || []).length ? ` · Empties back: ${emptiesSummary(d, sizes)}` : "") +
         `<div style="margin-top:8px">` +
+        (hasRevenue ? `<button class="link" data-togglepaid="${d.id}">${d.paid ? "Mark unpaid" : "Mark paid"}</button> · ` : "") +
         `<button class="link" data-edit="${d.id}">Edit</button> · ` +
         `<button class="link" data-del="${d.id}">Delete</button></div>` +
-        `</div>`).join("");
+        `</div>`;
+      }).join("");
 
+      container.querySelectorAll("[data-togglepaid]").forEach((b) =>
+        b.addEventListener("click", async () => {
+          const d = A.state.deliveries.find((x) => x.id === b.dataset.togglepaid);
+          await A.setDeliveryPaid(b.dataset.togglepaid, !(d && d.paid));
+        }));
       container.querySelectorAll("[data-edit]").forEach((b) =>
         b.addEventListener("click", () => A.editDelivery(b.dataset.edit)));
       container.querySelectorAll("[data-del]").forEach((b) =>

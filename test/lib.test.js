@@ -621,3 +621,10 @@ test("isRealEmail accepts real addresses and rejects synthetic name logins", () 
   assert.strictEqual(KO.isRealEmail(null, "kombucha.app"), false);
   assert.strictEqual(KO.isRealEmail("noatsign", "kombucha.app"), false);
 });
+
+test("customerEmailStatus classifies login/email state", () => {
+  assert.strictEqual(KO.customerEmailStatus({ uid: "u1", email: "paula@palmspot.pt" }, "kombucha.app"), "real");
+  assert.strictEqual(KO.customerEmailStatus({ uid: "u2", email: "koa@kombucha.app" }, "kombucha.app"), "synthetic");
+  assert.strictEqual(KO.customerEmailStatus({ email: "x@y.pt" }, "kombucha.app"), "none"); // no uid = no login
+  assert.strictEqual(KO.customerEmailStatus(null, "kombucha.app"), "none");
+});

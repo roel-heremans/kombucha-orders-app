@@ -65,6 +65,7 @@
       <button data-view="dashboard">Dashboard</button>
       <button data-view="production">Production</button>
       <button data-view="recibo">Recibo</button>
+      <button data-view="payments">Payments</button>
       <button data-view="settings">Settings</button>
     </nav>
     <main>
@@ -74,6 +75,7 @@
       <div id="view-dashboard" class="view hidden"></div>
       <div id="view-production" class="view hidden"></div>
       <div id="view-recibo" class="view hidden"></div>
+      <div id="view-payments" class="view hidden"></div>
       <div id="view-settings" class="view hidden"></div>
     </main>
   </div>
@@ -684,6 +686,72 @@
     }
 
     A.renderers.deliveries = render;
+  });
+  </script>
+
+  <script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const A = window.APP, KO = window.KO;
+    const container = document.getElementById("view-payments");
+
+    function yesterdayStr() {
+      const d = new Date();
+      const off = d.getTimezoneOffset();
+      return new Date(d.getTime() - off * 60000 - 86400000).toISOString().slice(0, 10);
+    }
+
+    function render() {
+      const sizes = A.state.settings ? A.state.settings.sizes : [];
+      const data = KO.openPayments(A.state.deliveries, sizes);
+      const custs = data.customers.slice().sort((a, b) =>
+        A.customerName(a.customerId).localeCompare(A.customerName(b.customerId)));
+
+      let html = `<div class="card"><h3>Open payments</h3>` +
+        `<p><strong>Total owed: €${KO.formatMoney(data.grandTotal)}</strong></p>` +
+        `<div class="row" style="align-items:flex-end">` +
+        `<div><label>Settle all unpaid up to</label><input id="cutoffDate" type="date" value="${yesterdayStr()}"/></div>` +
+        `<button class="link" id="settleCutoff" style="flex:0 0 auto">Mark paid</button></div>` +
+        `</div>`;
+
+      if (!custs.length) {
+        html += `<div class="card"><p class="muted">All caught up — nothing unpaid.</p></div>`;
+      } else {
+        html += custs.map((c) =>
+          `<div class="card"><strong>${A.esc(A.customerName(c.customerId))}</strong> — €${KO.formatMoney(c.total)}` +
+          c.months.map((m) =>
+            `<div style="border-top:1px solid var(--line);margin-top:8px;padding-top:8px">` +
+            `<div class="row"><div><strong>${KO.monthName(m.monthKey)} ${m.monthKey.slice(0, 4)}</strong> — €${KO.formatMoney(m.total)}</div>` +
+            `<button class="link" data-monthpaid="${c.customerId}|${m.monthKey}" style="flex:0 0 auto">Mark month paid</button></div>` +
+            m.items.map((it) =>
+              `<div class="row"><div class="muted">${it.date} — €${KO.formatMoney(it.amount)}</div>` +
+              `<button class="link" data-delivpaid="${it.id}" style="flex:0 0 auto">Mark paid</button></div>`).join("") +
+            `</div>`).join("") +
+          `</div>`).join("");
+      }
+      container.innerHTML = html;
+
+      const settleBtn = container.querySelector("#settleCutoff");
+      if (settleBtn) settleBtn.addEventListener("click", async () => {
+        const cutoff = container.querySelector("#cutoffDate").value;
+        if (!cutoff) return;
+        const ids = A.state.deliveries.filter((d) => !d.paid && d.date <= cutoff).map((d) => d.id);
+        if (!ids.length) { alert("No unpaid deliveries up to " + cutoff + "."); return; }
+        if (confirm("Mark " + ids.length + " delivery(ies) up to " + cutoff + " as paid?")) {
+          await A.setDeliveriesPaid(ids, true);
+        }
+      });
+      container.querySelectorAll("[data-delivpaid]").forEach((b) =>
+        b.addEventListener("click", async () => { await A.setDeliveryPaid(b.dataset.delivpaid, true); }));
+      container.querySelectorAll("[data-monthpaid]").forEach((b) =>
+        b.addEventListener("click", async () => {
+          const parts = b.dataset.monthpaid.split("|");
+          const cust = data.customers.find((x) => x.customerId === parts[0]);
+          const mo = cust && cust.months.find((x) => x.monthKey === parts[1]);
+          if (mo) await A.setDeliveriesPaid(mo.items.map((it) => it.id), true);
+        }));
+    }
+
+    A.renderers.payments = render;
   });
   </script>
 

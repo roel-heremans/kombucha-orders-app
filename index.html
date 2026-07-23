@@ -1157,7 +1157,18 @@
             return;
           }
           await A.uploadRecibo(custId, cust.uid, mk, file.name, file.size, base64, A.user ? A.user.email : "");
-          const m = container.querySelector("#ruMsg"); if (m) m.textContent = "Uploaded ✓";
+          let msg = "Uploaded ✓";
+          if (KO.isRealEmail(cust.email, LOGIN_NAME_DOMAIN)) {
+            A.emailRecibo({
+              name: cust.name,
+              to_email: cust.email,
+              recibo_text: KO.generateRecibo(A.state.deliveries, custId, mk, A.state.settings.sizes, A.state.settings.reciboHeader, cust.nif),
+            });
+            msg = "Uploaded ✓ — emailed " + cust.email;
+          } else {
+            msg = "Uploaded ✓ — no email on file; send it manually.";
+          }
+          const m = container.querySelector("#ruMsg"); if (m) m.textContent = msg;
         } catch (ex) {
           const m = container.querySelector("#ruMsg"); if (m) m.textContent = "Upload failed: " + (ex.code || ex.message);
           const b = container.querySelector("#ruUpload"); if (b) b.disabled = false;

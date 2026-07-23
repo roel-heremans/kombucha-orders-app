@@ -34,6 +34,9 @@
     .toast { position:fixed; left:50%; bottom:24px; transform:translateX(-50%) translateY(20px); background:var(--green); color:#fff; padding:12px 20px; border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,.2); opacity:0; pointer-events:none; transition:opacity .3s, transform .3s; z-index:1000; max-width:90vw; text-align:center; font-size:14px; }
     .toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
     .toast.error { background:#c0392b; }
+    .pill { display:inline-block; font-size:11px; padding:2px 8px; border-radius:10px; vertical-align:middle; }
+    .pill-ok { background:#e6f4ea; color:#1e6b3a; }
+    .pill-muted { background:#f0efe9; color:#777; }
   </style>
 </head>
 <body>
@@ -1231,10 +1234,17 @@
           `<label>Recibo header text</label><input id="recHeader" value="${A.esc(st.reciboHeader)}"/>` +
           `<button class="primary" id="saveSettings">Save settings</button>` +
           `<p id="setMsg" class="muted"></p></details></div>` +
-        `<div class="card"><details><summary>Customers (${A.state.customers.length})</summary>` +
+        `<div class="card"><details><summary>Customers (${A.state.customers.length}) — ${A.state.customers.filter((c) => KO.customerEmailStatus(c, A.loginNameDomain) === "real").length} with email</summary>` +
           `<p class="muted">Set each customer's type, NIF and notes. Add new customers from the New delivery screen.</p>` +
-          A.state.customers.slice().sort((a,b)=>a.name.localeCompare(b.name)).map((c) =>
-            `<div class="cust-edit" data-cid="${c.id}" style="border-top:1px solid var(--line);padding-top:8px;margin-top:8px">` +
+          A.state.customers.slice().sort((a,b)=>a.name.localeCompare(b.name)).map((c) => {
+            const status = KO.customerEmailStatus(c, A.loginNameDomain);
+            const emailBadge = status === "real"
+              ? `<span class="pill pill-ok">✉ ${A.esc(c.email)}</span>`
+              : status === "synthetic"
+                ? `<span class="pill pill-muted">name login — no email</span>`
+                : `<span class="pill pill-muted">no login</span>`;
+            return `<div class="cust-edit" data-cid="${c.id}" style="border-top:1px solid var(--line);padding-top:8px;margin-top:8px">` +
+            `<div style="margin-bottom:4px">${emailBadge}</div>` +
             `<label>Name</label><input class="c-name" value="${A.esc(c.name)}"/>` +
             `<div class="row"><div><label>Type</label><select class="c-type">` +
               `<option value="restaurant" ${(c.type||"restaurant")==="restaurant"?"selected":""}>Restaurant</option>` +
@@ -1244,7 +1254,8 @@
             `<label>Notes</label><input class="c-notes" value="${A.esc(c.notes||"")}"/>` +
             `<div class="row"><button class="link c-save">Save</button>` +
             `<button class="link" data-delcust="${c.id}" style="flex:0 0 60px">Delete</button></div>` +
-            `</div>`).join("") +
+            `</div>`;
+          }).join("") +
           `</details></div>` +
         `<div class="card"><details><summary>Flavours (${A.state.flavours.length})</summary>` +
           A.state.flavours.slice().sort((a,b)=>a.name.localeCompare(b.name)).map((f) =>

@@ -126,6 +126,7 @@
 
     // Expose to later-task code via a single namespace.
     window.APP = { app, auth, db, state: { customers: [], flavours: [], deliveries: [], orders: [], recibos: [], batches: [], stocktakes: [], settings: null }, current: {} };
+    window.APP.loginNameDomain = LOGIN_NAME_DOMAIN; // expose to non-module script blocks (e.g. recibo upload handler)
     window.APP.esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
 
     // Online/offline banner
@@ -1176,7 +1177,7 @@
           }
           await A.uploadRecibo(custId, cust.uid, mk, file.name, file.size, base64, A.user ? A.user.email : "");
           let msg = "Uploaded ✓";
-          if (KO.isRealEmail(cust.email, LOGIN_NAME_DOMAIN)) {
+          if (KO.isRealEmail(cust.email, A.loginNameDomain)) {
             A.emailRecibo({
               name: cust.name,
               to_email: cust.email,

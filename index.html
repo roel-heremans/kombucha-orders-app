@@ -31,6 +31,9 @@
     .badge { display:inline-block; min-width:18px; padding:0 5px; border-radius:9px;
       background:#c0392b; color:#fff; font-size:11px; line-height:18px; text-align:center; }
     .badge.hidden { display:none; }
+    .toast { position:fixed; left:50%; bottom:24px; transform:translateX(-50%) translateY(20px); background:var(--green); color:#fff; padding:12px 20px; border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,.2); opacity:0; pointer-events:none; transition:opacity .3s, transform .3s; z-index:1000; max-width:90vw; text-align:center; font-size:14px; }
+    .toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+    .toast.error { background:#c0392b; }
   </style>
 </head>
 <body>
@@ -339,6 +342,21 @@
       } catch (e) {
         console.warn("emailRecibo failed:", e);
       }
+    };
+
+    window.APP.toast = function (msg, isError) {
+      let el = document.getElementById("appToast");
+      if (!el) {
+        el = document.createElement("div");
+        el.id = "appToast";
+        el.setAttribute("role", "status");
+        el.setAttribute("aria-live", "polite");
+        document.body.appendChild(el);
+      }
+      el.textContent = msg;
+      el.className = "toast show" + (isError ? " error" : "");
+      clearTimeout(el._hideTimer);
+      el._hideTimer = setTimeout(function () { el.className = "toast" + (isError ? " error" : ""); }, 5000);
     };
 
     window.APP.notifyWhatsApp = function (text) {
@@ -1169,8 +1187,10 @@
             msg = "Uploaded ✓ — no email on file; send it manually.";
           }
           const m = container.querySelector("#ruMsg"); if (m) m.textContent = msg;
+          A.toast(msg);
         } catch (ex) {
           const m = container.querySelector("#ruMsg"); if (m) m.textContent = "Upload failed: " + (ex.code || ex.message);
+          A.toast("Upload failed: " + (ex.code || ex.message), true);
           const b = container.querySelector("#ruUpload"); if (b) b.disabled = false;
         }
       });

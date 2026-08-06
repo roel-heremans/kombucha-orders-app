@@ -363,7 +363,10 @@
     // invite would leave the admin thinking a customer had been told about the app.
     window.APP.emailInvite = async function (params) {
       const c = EMAILJS_CONFIG;
-      if (!c.serviceId || !c.publicKey || !EMAILJS_INVITE_TEMPLATE) return false;
+      if (!c.serviceId || !c.publicKey || !EMAILJS_INVITE_TEMPLATE) {
+        console.warn("emailInvite: not configured");
+        return false;
+      }
       try {
         const res = await fetch("https://api.emailjs.com/api/v1.0/email/send", {
           method: "POST",

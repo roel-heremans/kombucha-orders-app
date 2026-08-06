@@ -1368,6 +1368,17 @@
             `</select></div>` +
             `<div><label>NIF</label><input class="c-nif" value="${A.esc(c.nif||"")}"/></div></div>` +
             `<label>Notes</label><input class="c-notes" value="${A.esc(c.notes||"")}"/>` +
+            (status === "real"
+              ? `<div class="row"><button class="link c-invite">Send App Invite</button></div>` +
+                `<div class="c-invite-box hidden">` +
+                  `<label>Password to include</label><input class="c-invite-pw" type="text"/>` +
+                  `<p class="muted">Will be sent to ${A.esc(c.email)}</p>` +
+                  `<div class="row"><button class="link c-invite-send">Send</button>` +
+                  `<button class="link c-invite-cancel">Cancel</button></div>` +
+                  `<p class="muted c-invite-msg"></p></div>`
+              : status === "synthetic"
+                ? `<p class="muted">Name login — no inbox to invite.</p>`
+                : `<p class="muted">No login yet — create one in Customers Login below first.</p>`) +
             `<div class="row"><button class="link c-save">Save</button>` +
             `<button class="link" data-delcust="${c.id}" style="flex:0 0 60px">Delete</button></div>` +
             `</div>`;
@@ -1404,7 +1415,7 @@
         container.querySelector("#setMsg").textContent = "Saved ✓";
       });
 
-      container.querySelectorAll(".cust-edit").forEach((card) =>
+      container.querySelectorAll(".cust-edit").forEach((card) => {
         card.querySelector(".c-save").addEventListener("click", async () => {
           const save = card.querySelector(".c-save");
           try {
@@ -1417,7 +1428,38 @@
             });
             save.textContent = "Saved ✓";
           } catch (e) { save.textContent = "Save failed"; }
-        }));
+        });
+
+        const invite = card.querySelector(".c-invite");
+        if (invite) {
+          const box = card.querySelector(".c-invite-box");
+          const pw = card.querySelector(".c-invite-pw");
+          const msg = card.querySelector(".c-invite-msg");
+          const send = card.querySelector(".c-invite-send");
+          invite.addEventListener("click", () => {
+            box.classList.toggle("hidden");
+            if (!box.classList.contains("hidden")) pw.focus();
+          });
+          card.querySelector(".c-invite-cancel").addEventListener("click", () => {
+            box.classList.add("hidden"); pw.value = ""; msg.textContent = "";
+          });
+          send.addEventListener("click", async () => {
+            const cust = A.state.customers.find((x) => x.id === card.dataset.cid);
+            const params = KO.inviteEmailParams(cust, pw.value, A.loginNameDomain);
+            if (!params) { msg.textContent = "Enter the password to include."; return; }
+            send.disabled = true; msg.textContent = "Sending…";
+            const ok = await A.emailInvite(params);
+            send.disabled = false;
+            if (ok) {
+              box.classList.add("hidden"); pw.value = ""; msg.textContent = "";
+              A.toast("Invite sent to " + params.to_email);
+            } else {
+              // Keep the typed password: it is the one thing the admin cannot recover from the app.
+              msg.textContent = "Send failed — check the EmailJS template is configured.";
+            }
+          });
+        }
+      });
 
       container.querySelectorAll("[data-delcust]").forEach((b) =>
         b.addEventListener("click", async () => {

@@ -1393,7 +1393,7 @@
           `<label>Recibo header text</label><input id="recHeader" value="${A.esc(st.reciboHeader)}"/>` +
           `<button class="primary" id="saveSettings">Save settings</button>` +
           `<p id="setMsg" class="muted"></p></details></div>` +
-        `<div class="card"><details><summary>Customers (${A.state.customers.length}) — ${A.state.customers.filter((c) => KO.customerEmailStatus(c, A.loginNameDomain) === "real").length} with email</summary>` +
+        `<div class="card"><details${selCust ? " open" : ""}><summary>Customers (${A.state.customers.length}) — ${A.state.customers.filter((c) => KO.customerEmailStatus(c, A.loginNameDomain) === "real").length} with email</summary>` +
           `<p class="muted">Choose a customer to edit their details. Add new customers from the New delivery screen.</p>` +
           `<label>Customer</label><select id="setCust">` +
             `<option value="">— choose customer —</option>` +
@@ -1413,7 +1413,7 @@
         `<div class="card"><details><summary>Customers Login</summary>` +
           `<p class="muted">Create an app login so a restaurant can place their own orders.</p>` +
           `<label>Customer</label><select id="rlCust">` +
-            A.state.customers.slice().sort((a,b)=>a.name.localeCompare(b.name)).map((c) =>
+            sortedCustomers.map((c) =>
               `<option value="${c.id}">${A.esc(c.name)}${c.uid ? " ✓ has login" : ""}</option>`).join("") +
           `</select>` +
           `<label>Login email or name</label><input id="rlEmail" type="text"/>` +

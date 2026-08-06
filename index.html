@@ -1375,6 +1375,11 @@
       const st = A.state.settings;
       if (!st) { container.innerHTML = "<p class='muted'>Loading…</p>"; return; }
 
+      const sortedCustomers = A.state.customers.slice().sort((a,b)=>a.name.localeCompare(b.name));
+      // Resolve against live state: the selected customer may have been deleted on
+      // another device, and the resulting snapshot re-render must not try to draw it.
+      const selCust = A.state.customers.find((c) => c.id === A.current.settingsCust) || null;
+
       container.innerHTML =
         `<div class="card"><h4>Account</h4><p class="muted">${A.user ? A.user.email : ""}</p>` +
           `<button class="link" id="logoutBtn">Log out</button></div>` +
@@ -1389,8 +1394,16 @@
           `<button class="primary" id="saveSettings">Save settings</button>` +
           `<p id="setMsg" class="muted"></p></details></div>` +
         `<div class="card"><details><summary>Customers (${A.state.customers.length}) — ${A.state.customers.filter((c) => KO.customerEmailStatus(c, A.loginNameDomain) === "real").length} with email</summary>` +
-          `<p class="muted">Set each customer's type, NIF and notes. Add new customers from the New delivery screen.</p>` +
-          A.state.customers.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(customerBlockHtml).join("") +
+          `<p class="muted">Choose a customer to edit their details. Add new customers from the New delivery screen.</p>` +
+          `<label>Customer</label><select id="setCust">` +
+            `<option value="">— choose customer —</option>` +
+            sortedCustomers.map((c) => {
+              const cs = KO.customerEmailStatus(c, A.loginNameDomain);
+              const suffix = cs === "real" ? " ✉" : cs === "synthetic" ? " — name login" : " — no login";
+              return `<option value="${c.id}" ${selCust && c.id === selCust.id ? "selected" : ""}>${A.esc(c.name)}${suffix}</option>`;
+            }).join("") +
+          `</select>` +
+          (selCust ? customerBlockHtml(selCust) : "") +
           `</details></div>` +
         `<div class="card"><details><summary>Flavours (${A.state.flavours.length})</summary>` +
           A.state.flavours.slice().sort((a,b)=>a.name.localeCompare(b.name)).map((f) =>
@@ -1421,6 +1434,12 @@
         }));
         await A.saveSettings({ sizes, reciboHeader: container.querySelector("#recHeader").value.trim() });
         container.querySelector("#setMsg").textContent = "Saved ✓";
+      });
+
+      const setCustSel = container.querySelector("#setCust");
+      if (setCustSel) setCustSel.addEventListener("change", (e) => {
+        A.current.settingsCust = e.target.value;
+        render();
       });
 
       container.querySelectorAll(".cust-edit").forEach((card) => {
@@ -1472,7 +1491,12 @@
       container.querySelectorAll("[data-delcust]").forEach((b) =>
         b.addEventListener("click", async () => {
           if (customerInUse(b.dataset.delcust)) { alert("Cannot delete: this customer has deliveries."); return; }
-          if (confirm("Delete this customer?")) await A.deleteCustomer(b.dataset.delcust);
+          if (confirm("Delete this customer?")) {
+            // Drop the selection first: leaving it set would point at a customer
+            // that no longer exists, giving an empty card and a stale dropdown.
+            if (A.current.settingsCust === b.dataset.delcust) A.current.settingsCust = "";
+            await A.deleteCustomer(b.dataset.delcust);
+          }
         }));
       container.querySelectorAll("[data-delflav]").forEach((b) =>
         b.addEventListener("click", async () => {

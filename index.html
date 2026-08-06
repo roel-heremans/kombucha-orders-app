@@ -1336,6 +1336,7 @@
             return `<div class="cust-edit" data-cid="${c.id}" style="border-top:1px solid var(--line);padding-top:8px;margin-top:8px">` +
             `<div style="margin-bottom:4px">${emailBadge}</div>` +
             `<label>Name</label><input class="c-name" value="${A.esc(c.name)}"/>` +
+            `<label>Contact person</label><input class="c-contact" value="${A.esc(c.contact||"")}"/>` +
             `<div class="row"><div><label>Type</label><select class="c-type">` +
               `<option value="restaurant" ${(c.type||"restaurant")==="restaurant"?"selected":""}>Restaurant</option>` +
               `<option value="private" ${c.type==="private"?"selected":""}>Private</option>` +
@@ -1384,6 +1385,7 @@
           try {
             await A.updateCustomer(card.dataset.cid, {
               name: card.querySelector(".c-name").value.trim(),
+              contact: card.querySelector(".c-contact").value.trim(),
               type: card.querySelector(".c-type").value,
               nif: card.querySelector(".c-nif").value.trim(),
               notes: card.querySelector(".c-notes").value.trim(),

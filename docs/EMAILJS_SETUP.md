@@ -92,6 +92,70 @@ Only customers who log in with a **real email** receive this. Name-based logins
 send those manually. In the admin **Settings → Customers** card, a badge shows
 which customers have a real email (green `✉ …`) vs. name logins (`no email`).
 
+## App invite email (optional)
+
+Settings → Customers has a **Send App Invite** button for every customer that has
+a login *and* a real email address. It emails them the app link, their login
+address and their password. The password is **typed by the admin when sending** —
+the app cannot look it up, because only a hash is stored in Firebase Auth.
+
+1. In EmailJS, create a new Email Template.
+2. Set **To Email** to `{{to_email}}`.
+3. Set the **Subject** to:
+   `Aplicação de encomendas / Ordering app — Real Health Kombucha`
+4. Set **From Name** to the static text `Real Health Kombucha`.
+5. Set **Reply To** to a real address you monitor (e.g. `roel.heremans@gmail.com`).
+6. Set the **Content** to (Portuguese first, then English):
+
+   ```
+   Caro(a) {{contact_name}},
+
+   Para simplificar as suas encomendas de kombucha, criámos uma aplicação onde
+   pode encomendar diretamente, a qualquer momento.
+
+   Aplicação:      https://roel-heremans.github.io/kombucha-orders-app/
+   Utilizador:     {{login_email}}
+   Palavra-passe:  {{password}}
+
+   Na aplicação pode fazer as suas encomendas, acompanhar o estado de cada uma e
+   transferir os seus recibos verdes. A aplicação está disponível em português e
+   em inglês.
+
+   Ficamos ao seu dispor para qualquer esclarecimento.
+
+   Com os melhores cumprimentos,
+   Real Health Kombucha
+
+   ─────────────
+
+   Dear {{contact_name}},
+
+   To make ordering kombucha easier, we have set up an app where you can place
+   your orders directly, at any time.
+
+   App:       https://roel-heremans.github.io/kombucha-orders-app/
+   Username:  {{login_email}}
+   Password:  {{password}}
+
+   In the app you can place orders, follow the status of each one, and download
+   your recibos verdes. The app is available in Portuguese and English.
+
+   Please do not hesitate to contact us if you have any questions.
+
+   Best regards,
+   Real Health Kombucha
+   ```
+
+7. Note the template's **Template ID** and put it in `index.html` as
+   `EMAILJS_INVITE_TEMPLATE`. Leave it empty to keep the feature off.
+
+The greeting uses the customer's **Contact person** field when set, falling back
+to the customer name. Set it in Settings → Customers so the email opens
+"Caro(a) Sr. Luis" rather than "Caro(a) Palheiro Estate".
+
+**Note:** this email contains a working password in plain text. Check the
+destination address shown next to the password field before sending.
+
 ### Deliverability (staying out of spam)
 
 Recibo emails go to external mailboxes that may not know the sender yet, so they

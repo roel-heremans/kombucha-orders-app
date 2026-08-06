@@ -114,6 +114,7 @@
     // Optional new-order email alerts (see docs/EMAILJS_SETUP.md). Empty = disabled.
     const EMAILJS_CONFIG = { serviceId: "service_o9ospkv", templateId: "template_flxfpn9", publicKey: "xA2Pc69R2LtlXm0Rm" };
     const EMAILJS_RECIBO_TEMPLATE = "template_37xzu1n"; // new template for recibo-upload emails; empty = disabled
+    const EMAILJS_INVITE_TEMPLATE = ""; // app-invite emails (see docs/EMAILJS_SETUP.md); empty = disabled
 
     // Optional WhatsApp alerts via CallMeBot (see docs/CALLMEBOT_SETUP.md). Empty phone/apikey = skipped.
     const CALLMEBOT_RECIPIENTS = [
@@ -355,6 +356,30 @@
         if (!res.ok) console.warn("emailRecibo: EmailJS HTTP", res.status);
       } catch (e) {
         console.warn("emailRecibo failed:", e);
+      }
+    };
+
+    // Unlike notifyNewOrder/emailRecibo this reports success: a silently failed
+    // invite would leave the admin thinking a customer had been told about the app.
+    window.APP.emailInvite = async function (params) {
+      const c = EMAILJS_CONFIG;
+      if (!c.serviceId || !c.publicKey || !EMAILJS_INVITE_TEMPLATE) return false;
+      try {
+        const res = await fetch("https://api.emailjs.com/api/v1.0/email/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            service_id: c.serviceId,
+            template_id: EMAILJS_INVITE_TEMPLATE,
+            user_id: c.publicKey,
+            template_params: params || {},
+          }),
+        });
+        if (!res.ok) console.warn("emailInvite: EmailJS HTTP", res.status);
+        return res.ok;
+      } catch (e) {
+        console.warn("emailInvite failed:", e);
+        return false;
       }
     };
 

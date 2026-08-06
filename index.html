@@ -112,9 +112,12 @@
     const LOGIN_NAME_DOMAIN = "kombucha.app"; // bare names become <name>@this for Firebase auth
 
     // Optional new-order email alerts (see docs/EMAILJS_SETUP.md). Empty = disabled.
-    const EMAILJS_CONFIG = { serviceId: "service_o9ospkv", templateId: "template_flxfpn9", publicKey: "xA2Pc69R2LtlXm0Rm" };
+    // templateId is blank: the new-order email is off. EmailJS's free tier allows
+    // only 2 templates, and that alert duplicated the CallMeBot WhatsApp message
+    // both admins already get on every order, so its slot was reused for invites.
+    const EMAILJS_CONFIG = { serviceId: "service_o9ospkv", templateId: "", publicKey: "xA2Pc69R2LtlXm0Rm" };
     const EMAILJS_RECIBO_TEMPLATE = "template_37xzu1n"; // new template for recibo-upload emails; empty = disabled
-    const EMAILJS_INVITE_TEMPLATE = ""; // app-invite emails (see docs/EMAILJS_SETUP.md); empty = disabled
+    const EMAILJS_INVITE_TEMPLATE = "template_flxfpn9"; // app-invite emails (see docs/EMAILJS_SETUP.md); empty = disabled
 
     // Optional WhatsApp alerts via CallMeBot (see docs/CALLMEBOT_SETUP.md). Empty phone/apikey = skipped.
     const CALLMEBOT_RECIPIENTS = [

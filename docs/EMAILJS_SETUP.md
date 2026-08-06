@@ -1,5 +1,12 @@
 # EmailJS setup — new-order email alerts (optional)
 
+> **Currently OFF.** `EMAILJS_CONFIG.templateId` is blank, so no new-order email
+> is sent. The free tier allows only **2 templates**, and this alert duplicated
+> the CallMeBot WhatsApp message both admins already receive on every order, so
+> its template (`template_flxfpn9`) was reused for the app invite email — see
+> "App invite email" below. To bring it back you would need a third template
+> slot (a paid plan), or to give up one of the other two.
+
 When a restaurant places an order, the app can email Roel + Nina. This is
 optional and off until configured. It uses EmailJS (client-side, free tier).
 
@@ -99,8 +106,15 @@ a login *and* a real email address. It emails them the app link, their login
 address and their password. The password is **typed by the admin when sending** —
 the app cannot look it up, because only a hash is stored in Firebase Auth.
 
-1. In EmailJS, create a new Email Template.
-2. Set **To Email** to `{{to_email}}`.
+This reuses the template slot that used to hold the new-order alert
+(`template_flxfpn9`), because the free tier allows only 2 templates and that
+alert duplicated the WhatsApp notification. The template was **edited in place**,
+so its ID is unchanged.
+
+1. In EmailJS, open the existing `template_flxfpn9` template and replace its
+   fields as below. (If you are setting this up fresh on a plan with a spare
+   slot, create a new template instead and use its ID in step 7.)
+2. Set **To Email** to `{{to_email}}` (it previously held the admin addresses).
 3. Set the **Subject** to:
    `Aplicação de encomendas / Ordering app — Real Health Kombucha`
 4. Set **From Name** to the static text `Real Health Kombucha`.

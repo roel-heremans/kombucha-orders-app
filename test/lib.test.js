@@ -629,6 +629,39 @@ test("customerEmailStatus classifies login/email state", () => {
   assert.strictEqual(KO.customerEmailStatus(null, "kombucha.app"), "none");
 });
 
+test("inviteEmailParams builds template params for an invitable customer", () => {
+  const c = { uid: "u1", name: "Palheiro Estate", contact: "Sr. Luis",
+              email: "luis.emanuel@palheiroestate.com" };
+  assert.deepStrictEqual(KO.inviteEmailParams(c, "KombuchaCasaVelha108", "kombucha.app"), {
+    contact_name: "Sr. Luis",
+    to_email: "luis.emanuel@palheiroestate.com",
+    login_email: "luis.emanuel@palheiroestate.com",
+    password: "KombuchaCasaVelha108",
+  });
+});
+
+test("inviteEmailParams falls back to the customer name when contact is blank", () => {
+  const base = { uid: "u1", name: "See - Kelly", email: "seemadeira@mail.com" };
+  const expect = (c) => KO.inviteEmailParams(c, "pw123456", "kombucha.app").contact_name;
+  assert.strictEqual(expect(base), "See - Kelly");
+  assert.strictEqual(expect(Object.assign({}, base, { contact: "" })), "See - Kelly");
+  assert.strictEqual(expect(Object.assign({}, base, { contact: "   " })), "See - Kelly");
+});
+
+test("inviteEmailParams returns null when the customer cannot be invited", () => {
+  const ok = { uid: "u1", name: "See - Kelly", email: "seemadeira@mail.com" };
+  // no login yet
+  assert.strictEqual(KO.inviteEmailParams({ name: "X", email: "x@y.pt" }, "pw123456", "kombucha.app"), null);
+  // synthetic address has no inbox
+  assert.strictEqual(KO.inviteEmailParams({ uid: "u2", name: "Koa", email: "koa@kombucha.app" }, "pw123456", "kombucha.app"), null);
+  // nothing to send
+  assert.strictEqual(KO.inviteEmailParams(ok, "", "kombucha.app"), null);
+  assert.strictEqual(KO.inviteEmailParams(ok, "   ", "kombucha.app"), null);
+  assert.strictEqual(KO.inviteEmailParams(ok, null, "kombucha.app"), null);
+  // no customer
+  assert.strictEqual(KO.inviteEmailParams(null, "pw123456", "kombucha.app"), null);
+});
+
 test("openPayments groups unpaid deliveries by customer and month", () => {
   const sizes = [{ id: "1L", label: "1 L", price: 8, deposit: 0 }];
   const delivs = [

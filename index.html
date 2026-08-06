@@ -114,6 +114,7 @@
     // Optional new-order email alerts (see docs/EMAILJS_SETUP.md). Empty = disabled.
     const EMAILJS_CONFIG = { serviceId: "service_o9ospkv", templateId: "template_flxfpn9", publicKey: "xA2Pc69R2LtlXm0Rm" };
     const EMAILJS_RECIBO_TEMPLATE = "template_37xzu1n"; // new template for recibo-upload emails; empty = disabled
+    const EMAILJS_INVITE_TEMPLATE = ""; // app-invite emails (see docs/EMAILJS_SETUP.md); empty = disabled
 
     // Optional WhatsApp alerts via CallMeBot (see docs/CALLMEBOT_SETUP.md). Empty phone/apikey = skipped.
     const CALLMEBOT_RECIPIENTS = [
@@ -355,6 +356,33 @@
         if (!res.ok) console.warn("emailRecibo: EmailJS HTTP", res.status);
       } catch (e) {
         console.warn("emailRecibo failed:", e);
+      }
+    };
+
+    // Unlike notifyNewOrder/emailRecibo this reports success: a silently failed
+    // invite would leave the admin thinking a customer had been told about the app.
+    window.APP.emailInvite = async function (params) {
+      const c = EMAILJS_CONFIG;
+      if (!c.serviceId || !c.publicKey || !EMAILJS_INVITE_TEMPLATE) {
+        console.warn("emailInvite: not configured");
+        return false;
+      }
+      try {
+        const res = await fetch("https://api.emailjs.com/api/v1.0/email/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            service_id: c.serviceId,
+            template_id: EMAILJS_INVITE_TEMPLATE,
+            user_id: c.publicKey,
+            template_params: params || {},
+          }),
+        });
+        if (!res.ok) console.warn("emailInvite: EmailJS HTTP", res.status);
+        return res.ok;
+      } catch (e) {
+        console.warn("emailInvite failed:", e);
+        return false;
       }
     };
 
@@ -1336,12 +1364,24 @@
             return `<div class="cust-edit" data-cid="${c.id}" style="border-top:1px solid var(--line);padding-top:8px;margin-top:8px">` +
             `<div style="margin-bottom:4px">${emailBadge}</div>` +
             `<label>Name</label><input class="c-name" value="${A.esc(c.name)}"/>` +
+            `<label>Contact person</label><input class="c-contact" value="${A.esc(c.contact||"")}"/>` +
             `<div class="row"><div><label>Type</label><select class="c-type">` +
               `<option value="restaurant" ${(c.type||"restaurant")==="restaurant"?"selected":""}>Restaurant</option>` +
               `<option value="private" ${c.type==="private"?"selected":""}>Private</option>` +
             `</select></div>` +
             `<div><label>NIF</label><input class="c-nif" value="${A.esc(c.nif||"")}"/></div></div>` +
             `<label>Notes</label><input class="c-notes" value="${A.esc(c.notes||"")}"/>` +
+            (status === "real"
+              ? `<div class="row"><button class="link c-invite">Send App Invite</button></div>` +
+                `<div class="c-invite-box hidden">` +
+                  `<label>Password to include</label><input class="c-invite-pw" type="text"/>` +
+                  `<p class="muted">Will be sent to ${A.esc(c.email)}</p>` +
+                  `<div class="row"><button class="link c-invite-send">Send</button>` +
+                  `<button class="link c-invite-cancel">Cancel</button></div>` +
+                  `<p class="muted c-invite-msg"></p></div>`
+              : status === "synthetic"
+                ? `<p class="muted">Name login — no inbox to invite.</p>`
+                : `<p class="muted">No login yet — create one in Customers Login below first.</p>`) +
             `<div class="row"><button class="link c-save">Save</button>` +
             `<button class="link" data-delcust="${c.id}" style="flex:0 0 60px">Delete</button></div>` +
             `</div>`;
@@ -1378,19 +1418,51 @@
         container.querySelector("#setMsg").textContent = "Saved ✓";
       });
 
-      container.querySelectorAll(".cust-edit").forEach((card) =>
+      container.querySelectorAll(".cust-edit").forEach((card) => {
         card.querySelector(".c-save").addEventListener("click", async () => {
           const save = card.querySelector(".c-save");
           try {
             await A.updateCustomer(card.dataset.cid, {
               name: card.querySelector(".c-name").value.trim(),
+              contact: card.querySelector(".c-contact").value.trim(),
               type: card.querySelector(".c-type").value,
               nif: card.querySelector(".c-nif").value.trim(),
               notes: card.querySelector(".c-notes").value.trim(),
             });
             save.textContent = "Saved ✓";
           } catch (e) { save.textContent = "Save failed"; }
-        }));
+        });
+
+        const invite = card.querySelector(".c-invite");
+        if (invite) {
+          const box = card.querySelector(".c-invite-box");
+          const pw = card.querySelector(".c-invite-pw");
+          const msg = card.querySelector(".c-invite-msg");
+          const send = card.querySelector(".c-invite-send");
+          invite.addEventListener("click", () => {
+            box.classList.toggle("hidden");
+            if (!box.classList.contains("hidden")) pw.focus();
+          });
+          card.querySelector(".c-invite-cancel").addEventListener("click", () => {
+            box.classList.add("hidden"); pw.value = ""; msg.textContent = "";
+          });
+          send.addEventListener("click", async () => {
+            const cust = A.state.customers.find((x) => x.id === card.dataset.cid);
+            const params = KO.inviteEmailParams(cust, pw.value, A.loginNameDomain);
+            if (!params) { msg.textContent = "Enter the password to include."; return; }
+            send.disabled = true; msg.textContent = "Sending…";
+            const ok = await A.emailInvite(params);
+            send.disabled = false;
+            if (ok) {
+              box.classList.add("hidden"); pw.value = ""; msg.textContent = "";
+              A.toast("Invite sent to " + params.to_email);
+            } else {
+              // Keep the typed password: it is the one thing the admin cannot recover from the app.
+              msg.textContent = "Send failed — check the EmailJS template is configured.";
+            }
+          });
+        }
+      });
 
       container.querySelectorAll("[data-delcust]").forEach((b) =>
         b.addEventListener("click", async () => {

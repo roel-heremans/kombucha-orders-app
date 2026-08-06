@@ -1338,6 +1338,39 @@
     function customerInUse(id) { return A.state.deliveries.some((d) => d.customerId === id); }
     function flavourInUse(id) { return A.state.deliveries.some((d) => (d.items || []).some((it) => it.flavourId === id)); }
 
+    function customerBlockHtml(c) {
+      const status = KO.customerEmailStatus(c, A.loginNameDomain);
+      const emailBadge = status === "real"
+        ? `<span class="pill pill-ok">✉ ${A.esc(c.email)}</span>`
+        : status === "synthetic"
+          ? `<span class="pill pill-muted">name login — no email</span>`
+          : `<span class="pill pill-muted">no login</span>`;
+      return `<div class="cust-edit" data-cid="${c.id}" style="border-top:1px solid var(--line);padding-top:8px;margin-top:8px">` +
+      `<div style="margin-bottom:4px">${emailBadge}</div>` +
+      `<label>Name</label><input class="c-name" value="${A.esc(c.name)}"/>` +
+      `<label>Contact person</label><input class="c-contact" value="${A.esc(c.contact||"")}"/>` +
+      `<div class="row"><div><label>Type</label><select class="c-type">` +
+        `<option value="restaurant" ${(c.type||"restaurant")==="restaurant"?"selected":""}>Restaurant</option>` +
+        `<option value="private" ${c.type==="private"?"selected":""}>Private</option>` +
+      `</select></div>` +
+      `<div><label>NIF</label><input class="c-nif" value="${A.esc(c.nif||"")}"/></div></div>` +
+      `<label>Notes</label><input class="c-notes" value="${A.esc(c.notes||"")}"/>` +
+      (status === "real"
+        ? `<div class="row"><button class="link c-invite">Send App Invite</button></div>` +
+          `<div class="c-invite-box hidden">` +
+            `<label>Password to include</label><input class="c-invite-pw" type="text"/>` +
+            `<p class="muted">Will be sent to ${A.esc(c.email)}</p>` +
+            `<div class="row"><button class="link c-invite-send">Send</button>` +
+            `<button class="link c-invite-cancel">Cancel</button></div>` +
+            `<p class="muted c-invite-msg"></p></div>`
+        : status === "synthetic"
+          ? `<p class="muted">Name login — no inbox to invite.</p>`
+          : `<p class="muted">No login yet — create one in Customers Login below first.</p>`) +
+      `<div class="row"><button class="link c-save">Save</button>` +
+      `<button class="link" data-delcust="${c.id}" style="flex:0 0 60px">Delete</button></div>` +
+      `</div>`;
+    }
+
     function render() {
       const st = A.state.settings;
       if (!st) { container.innerHTML = "<p class='muted'>Loading…</p>"; return; }
@@ -1357,38 +1390,7 @@
           `<p id="setMsg" class="muted"></p></details></div>` +
         `<div class="card"><details><summary>Customers (${A.state.customers.length}) — ${A.state.customers.filter((c) => KO.customerEmailStatus(c, A.loginNameDomain) === "real").length} with email</summary>` +
           `<p class="muted">Set each customer's type, NIF and notes. Add new customers from the New delivery screen.</p>` +
-          A.state.customers.slice().sort((a,b)=>a.name.localeCompare(b.name)).map((c) => {
-            const status = KO.customerEmailStatus(c, A.loginNameDomain);
-            const emailBadge = status === "real"
-              ? `<span class="pill pill-ok">✉ ${A.esc(c.email)}</span>`
-              : status === "synthetic"
-                ? `<span class="pill pill-muted">name login — no email</span>`
-                : `<span class="pill pill-muted">no login</span>`;
-            return `<div class="cust-edit" data-cid="${c.id}" style="border-top:1px solid var(--line);padding-top:8px;margin-top:8px">` +
-            `<div style="margin-bottom:4px">${emailBadge}</div>` +
-            `<label>Name</label><input class="c-name" value="${A.esc(c.name)}"/>` +
-            `<label>Contact person</label><input class="c-contact" value="${A.esc(c.contact||"")}"/>` +
-            `<div class="row"><div><label>Type</label><select class="c-type">` +
-              `<option value="restaurant" ${(c.type||"restaurant")==="restaurant"?"selected":""}>Restaurant</option>` +
-              `<option value="private" ${c.type==="private"?"selected":""}>Private</option>` +
-            `</select></div>` +
-            `<div><label>NIF</label><input class="c-nif" value="${A.esc(c.nif||"")}"/></div></div>` +
-            `<label>Notes</label><input class="c-notes" value="${A.esc(c.notes||"")}"/>` +
-            (status === "real"
-              ? `<div class="row"><button class="link c-invite">Send App Invite</button></div>` +
-                `<div class="c-invite-box hidden">` +
-                  `<label>Password to include</label><input class="c-invite-pw" type="text"/>` +
-                  `<p class="muted">Will be sent to ${A.esc(c.email)}</p>` +
-                  `<div class="row"><button class="link c-invite-send">Send</button>` +
-                  `<button class="link c-invite-cancel">Cancel</button></div>` +
-                  `<p class="muted c-invite-msg"></p></div>`
-              : status === "synthetic"
-                ? `<p class="muted">Name login — no inbox to invite.</p>`
-                : `<p class="muted">No login yet — create one in Customers Login below first.</p>`) +
-            `<div class="row"><button class="link c-save">Save</button>` +
-            `<button class="link" data-delcust="${c.id}" style="flex:0 0 60px">Delete</button></div>` +
-            `</div>`;
-          }).join("") +
+          A.state.customers.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(customerBlockHtml).join("") +
           `</details></div>` +
         `<div class="card"><details><summary>Flavours (${A.state.flavours.length})</summary>` +
           A.state.flavours.slice().sort((a,b)=>a.name.localeCompare(b.name)).map((f) =>

@@ -53,6 +53,8 @@ for setup; the feature is off until configured.
 
 When an admin uploads a Recibo Verde PDF, the app can also email the restaurant with the recibo details; see [`docs/EMAILJS_SETUP.md`](docs/EMAILJS_SETUP.md) for template setup.
 
+When an admin sends an app invite from Settings → Customers, the app can email the customer their login credentials and app link; see [`docs/EMAILJS_SETUP.md`](docs/EMAILJS_SETUP.md) for template setup; the feature is off until configured.
+
 ## Bottle sizes & pricing (defaults, editable in Settings)
 
 | Size   | Sale price | Deposit |

@@ -674,5 +674,119 @@
     });
   }
 
-  return { formatMoney, sizeById, deliveryRevenue, deliveryDepositRefund, monthKey, inMonth, monthName, dayOfMonth, recentMonthKeys, resolveWindow, monthKeysBetween, inWindow, revenueInWindow, revenueByCustomerInWindow, flavourCountsInWindow, windowLabel, monthlyRevenue, revenueByCustomer, monthlyRevenueSeries, flavourCounts, revenueByCustomerType, outstandingByCustomer, openPayments, reciboSizeLabel, reciboDocId, nextBatchNumber, formatBatchNumber, bottles1LForConversion, sizeLiters, soldLitersInWindow, productionSummary, actionMoment, producedPerSize, deliveredPerSize, latestStocktake, availableToSell, consumptionPeriods, sumConsumption, generateRecibo, orderItemsSummary, orderEmailParams, inviteEmailParams, whatsappOrderText, lastOrderItems, lastDeliveryItems, orderStatusLabel, loginEmail, isRealEmail, customerEmailStatus, barChartSVG, stackedBarChartSVG, revenueByTypeInWindow, revenueTypeSeries, revenueTypeByYear, t };
+  // Minimal store-only (no compression) ZIP writer. PDFs are already
+  // compressed, so deflating them would add code for ~no size win.
+  const CRC_TABLE = (function () {
+    const t = new Int32Array(256);
+    for (let i = 0; i < 256; i++) {
+      let c = i;
+      for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+      t[i] = c;
+    }
+    return t;
+  })();
+
+  function crc32(bytes) {
+    let c = -1;
+    for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xff] ^ (c >>> 8);
+    return (c ^ -1) >>> 0;
+  }
+
+  function utf8Bytes(str) {
+    if (typeof TextEncoder !== "undefined") return new TextEncoder().encode(str);
+    const out = [];
+    for (let i = 0; i < str.length; i++) {
+      const c = str.charCodeAt(i);
+      if (c < 0x80) out.push(c);
+      else if (c < 0x800) out.push(0xc0 | (c >> 6), 0x80 | (c & 0x3f));
+      else out.push(0xe0 | (c >> 12), 0x80 | ((c >> 6) & 0x3f), 0x80 | (c & 0x3f));
+    }
+    return new Uint8Array(out);
+  }
+
+  // "r.pdf" twice becomes "r.pdf" and "r (2).pdf" — a zip with duplicate
+  // entry names extracts to a single overwritten file.
+  function uniqueZipNames(files) {
+    const seen = {};
+    return files.map(function (f) {
+      let name = f.name;
+      if (seen[name]) {
+        const dot = name.lastIndexOf(".");
+        const stem = dot > 0 ? name.slice(0, dot) : name;
+        const ext = dot > 0 ? name.slice(dot) : "";
+        let n = seen[name];
+        let candidate;
+        do { n++; candidate = stem + " (" + n + ")" + ext; } while (seen[candidate]);
+        seen[name] = n;
+        name = candidate;
+      }
+      seen[name] = seen[name] || 1;
+      return name;
+    });
+  }
+
+  function zipStore(files) {
+    const names = uniqueZipNames(files);
+    const entries = files.map(function (f, i) {
+      return { nameBytes: utf8Bytes(names[i]), bytes: f.bytes, crc: crc32(f.bytes) };
+    });
+    const localSize = entries.reduce(function (n, e) { return n + 30 + e.nameBytes.length + e.bytes.length; }, 0);
+    const centralSize = entries.reduce(function (n, e) { return n + 46 + e.nameBytes.length; }, 0);
+    const out = new Uint8Array(localSize + centralSize + 22);
+    const dv = new DataView(out.buffer);
+    let p = 0;
+
+    entries.forEach(function (e) {
+      e.offset = p;
+      dv.setUint32(p, 0x04034b50, true);       // local file header signature
+      dv.setUint16(p + 4, 20, true);           // version needed
+      dv.setUint16(p + 6, 0x0800, true);       // flags: UTF-8 names
+      dv.setUint16(p + 8, 0, true);            // method: store
+      dv.setUint16(p + 10, 0, true);           // mod time
+      dv.setUint16(p + 12, 0x21, true);        // mod date (1996-01-01; zips need a valid date)
+      dv.setUint32(p + 14, e.crc, true);
+      dv.setUint32(p + 18, e.bytes.length, true);
+      dv.setUint32(p + 22, e.bytes.length, true);
+      dv.setUint16(p + 26, e.nameBytes.length, true);
+      dv.setUint16(p + 28, 0, true);           // extra field length
+      out.set(e.nameBytes, p + 30);
+      out.set(e.bytes, p + 30 + e.nameBytes.length);
+      p += 30 + e.nameBytes.length + e.bytes.length;
+    });
+
+    const cdOffset = p;
+    entries.forEach(function (e) {
+      dv.setUint32(p, 0x02014b50, true);       // central directory header signature
+      dv.setUint16(p + 4, 20, true);           // version made by
+      dv.setUint16(p + 6, 20, true);           // version needed
+      dv.setUint16(p + 8, 0x0800, true);
+      dv.setUint16(p + 10, 0, true);
+      dv.setUint16(p + 12, 0, true);
+      dv.setUint16(p + 14, 0x21, true);
+      dv.setUint32(p + 16, e.crc, true);
+      dv.setUint32(p + 20, e.bytes.length, true);
+      dv.setUint32(p + 24, e.bytes.length, true);
+      dv.setUint16(p + 28, e.nameBytes.length, true);
+      dv.setUint16(p + 30, 0, true);           // extra
+      dv.setUint16(p + 32, 0, true);           // comment
+      dv.setUint16(p + 34, 0, true);           // disk number
+      dv.setUint16(p + 36, 0, true);           // internal attrs
+      dv.setUint32(p + 38, 0, true);           // external attrs
+      dv.setUint32(p + 42, e.offset, true);
+      out.set(e.nameBytes, p + 46);
+      p += 46 + e.nameBytes.length;
+    });
+
+    dv.setUint32(p, 0x06054b50, true);         // end of central directory
+    dv.setUint16(p + 4, 0, true);
+    dv.setUint16(p + 6, 0, true);
+    dv.setUint16(p + 8, entries.length, true);
+    dv.setUint16(p + 10, entries.length, true);
+    dv.setUint32(p + 12, centralSize, true);
+    dv.setUint32(p + 16, cdOffset, true);
+    dv.setUint16(p + 20, 0, true);             // comment length
+    return out;
+  }
+
+  return { formatMoney, sizeById, crc32, zipStore, deliveryRevenue, deliveryDepositRefund, monthKey, inMonth, monthName, dayOfMonth, recentMonthKeys, resolveWindow, monthKeysBetween, inWindow, revenueInWindow, revenueByCustomerInWindow, flavourCountsInWindow, windowLabel, monthlyRevenue, revenueByCustomer, monthlyRevenueSeries, flavourCounts, revenueByCustomerType, outstandingByCustomer, openPayments, reciboSizeLabel, reciboDocId, nextBatchNumber, formatBatchNumber, bottles1LForConversion, sizeLiters, soldLitersInWindow, productionSummary, actionMoment, producedPerSize, deliveredPerSize, latestStocktake, availableToSell, consumptionPeriods, sumConsumption, generateRecibo, orderItemsSummary, orderEmailParams, inviteEmailParams, whatsappOrderText, lastOrderItems, lastDeliveryItems, orderStatusLabel, loginEmail, isRealEmail, customerEmailStatus, barChartSVG, stackedBarChartSVG, revenueByTypeInWindow, revenueTypeSeries, revenueTypeByYear, t };
 });

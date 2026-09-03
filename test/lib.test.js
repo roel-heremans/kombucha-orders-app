@@ -685,3 +685,59 @@ test("openPayments groups unpaid deliveries by customer and month", () => {
   assert.strictEqual(cB.total, 8);
   assert.strictEqual(cB.months.length, 1);
 });
+
+test("crc32 matches known vectors", () => {
+  const bytes = (s) => new Uint8Array([...s].map((c) => c.charCodeAt(0)));
+  assert.strictEqual(KO.crc32(bytes("")), 0);
+  assert.strictEqual(KO.crc32(bytes("hello world")), 0x0d4a1185);
+  assert.strictEqual(KO.crc32(bytes("123456789")), 0xcbf43926);
+});
+
+test("zipStore builds an archive node's unzip can read back", async () => {
+  const enc = new TextEncoder();
+  const files = [
+    { name: "2026-07-recibo.pdf", bytes: enc.encode("%PDF-1.4 first") },
+    { name: "2026-08-recibo.pdf", bytes: enc.encode("%PDF-1.4 second file") },
+  ];
+  const zip = KO.zipStore(files);
+  assert.ok(zip instanceof Uint8Array);
+
+  // Local file header + End of central directory signatures.
+  assert.deepStrictEqual(Array.from(zip.slice(0, 4)), [0x50, 0x4b, 0x03, 0x04]);
+  const eocdSig = [0x50, 0x4b, 0x05, 0x06];
+  assert.deepStrictEqual(Array.from(zip.slice(zip.length - 22, zip.length - 18)), eocdSig);
+
+  // Central directory records both entries.
+  const dv = new DataView(zip.buffer, zip.byteOffset, zip.byteLength);
+  assert.strictEqual(dv.getUint16(zip.length - 14, true), files.length); // total entries
+  assert.strictEqual(dv.getUint16(zip.length - 12, true), files.length);
+
+  // Stored (method 0) and byte-identical payloads at the recorded offsets.
+  const cdOffset = dv.getUint32(zip.length - 6, true);
+  assert.deepStrictEqual(Array.from(zip.slice(cdOffset, cdOffset + 4)), [0x50, 0x4b, 0x01, 0x02]);
+  let p = 0;
+  for (const f of files) {
+    assert.strictEqual(dv.getUint16(p + 8, true), 0); // compression method: store
+    assert.strictEqual(dv.getUint32(p + 14, true), KO.crc32(f.bytes));
+    assert.strictEqual(dv.getUint32(p + 18, true), f.bytes.length);
+    const nameLen = dv.getUint16(p + 26, true);
+    const extraLen = dv.getUint16(p + 28, true);
+    const nameAt = p + 30;
+    assert.strictEqual(new TextDecoder().decode(zip.slice(nameAt, nameAt + nameLen)), f.name);
+    const dataAt = nameAt + nameLen + extraLen;
+    assert.deepStrictEqual(zip.slice(dataAt, dataAt + f.bytes.length), f.bytes);
+    p = dataAt + f.bytes.length;
+  }
+  assert.strictEqual(p, cdOffset);
+});
+
+test("zipStore de-duplicates repeated entry names", () => {
+  const enc = new TextEncoder();
+  const zip = KO.zipStore([
+    { name: "r.pdf", bytes: enc.encode("a") },
+    { name: "r.pdf", bytes: enc.encode("b") },
+  ]);
+  const text = new TextDecoder().decode(zip);
+  assert.ok(text.includes("r.pdf"));
+  assert.ok(text.includes("r (2).pdf"));
+});

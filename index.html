@@ -1231,6 +1231,12 @@
       });
     }
 
+    // Names come from user-supplied file names and customer names; keep them
+    // usable as a file name on disk and as a zip entry.
+    function safeName(name) {
+      return String(name).replace(/[\\/:*?"<>|\x00-\x1f]/g, "_").trim() || "recibo.pdf";
+    }
+
     function uploaderHtml(custId, mk, cust) {
       const uploads = A.state.recibos
         .filter((r) => r.customerId === custId)
@@ -1250,7 +1256,10 @@
             `<button class="primary" id="ruUpload">Upload PDF</button>`
           : `<p class="muted">This customer has no app login yet — create one in Settings → Customers Login before uploading their recibos.</p>`) +
         `<p id="ruMsg" class="muted"></p>` +
-        `<h4 style="margin-top:12px">Uploaded recibos</h4>${listHtml}</div>`;
+        `<div class="row" style="justify-content:space-between;margin-top:12px">` +
+        `<h4 style="margin:0">Uploaded recibos</h4>` +
+        (uploads.length > 1 ? `<button class="link" id="ruAll">Download all (${uploads.length})</button>` : "") +
+        `</div>${listHtml}</div>`;
     }
 
     function render() {
@@ -1330,6 +1339,50 @@
 
       // File bytes live in reciboFiles and are fetched on demand, so the download
       // is a blob URL clicked through a throwaway anchor rather than a plain link.
+      const saveBlob = (blob, fileName) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+      };
+
+      const ruAll = container.querySelector("#ruAll");
+      if (ruAll) ruAll.addEventListener("click", async () => {
+        const setMsg = (t) => { const m = container.querySelector("#ruMsg"); if (m) m.textContent = t; };
+        const cust = A.state.customers.find((c) => c.id === custId);
+        const recs = A.state.recibos
+          .filter((r) => r.customerId === custId)
+          .slice().sort((a, b) => (a.monthKey < b.monthKey ? -1 : 1));
+        ruAll.disabled = true;
+        const files = [];
+        const missing = [];
+        try {
+          for (let i = 0; i < recs.length; i++) {
+            setMsg(`Fetching ${i + 1}/${recs.length}…`);
+            const snap = await A.fetchReciboFile(recs[i].id);
+            if (!snap.exists()) { missing.push(recs[i].monthKey); continue; }
+            files.push({
+              name: safeName(recs[i].monthKey + "-" + (recs[i].fileName || "recibo.pdf")),
+              bytes: new Uint8Array(await A.base64ToBlob(snap.data().data, snap.data().contentType).arrayBuffer()),
+            });
+          }
+          if (!files.length) { setMsg("Nothing to download — no stored PDFs."); ruAll.disabled = false; return; }
+          setMsg("Zipping…");
+          const zip = KO.zipStore(files);
+          saveBlob(new Blob([zip], { type: "application/zip" }),
+            safeName("recibos-" + ((cust && cust.name) || custId) + ".zip"));
+          setMsg(`Downloaded ${files.length} PDF${files.length === 1 ? "" : "s"} ✓` +
+            (missing.length ? ` — ${missing.length} no longer stored (${missing.join(", ")})` : ""));
+        } catch (ex) {
+          setMsg("Download all failed: " + (ex.code || ex.message));
+        }
+        ruAll.disabled = false;
+      });
+
       container.querySelectorAll("[data-getrec]").forEach((b) =>
         b.addEventListener("click", async () => {
           const setMsg = (t) => { const m = container.querySelector("#ruMsg"); if (m) m.textContent = t; };
@@ -1339,14 +1392,7 @@
             const snap = await A.fetchReciboFile(b.dataset.getrec);
             if (!snap.exists()) { setMsg("That PDF is no longer stored."); b.disabled = false; return; }
             const d = snap.data();
-            const url = URL.createObjectURL(A.base64ToBlob(d.data, d.contentType));
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = (rec && rec.fileName) || "recibo.pdf";
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-            setTimeout(() => URL.revokeObjectURL(url), 60000);
+            saveBlob(A.base64ToBlob(d.data, d.contentType), safeName((rec && rec.fileName) || "recibo.pdf"));
             setMsg("Downloaded ✓");
           } catch (ex) {
             setMsg("Download failed: " + (ex.code || ex.message));

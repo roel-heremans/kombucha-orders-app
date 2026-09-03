@@ -313,6 +313,12 @@
       return batch.commit();
     };
     window.APP.fetchReciboFile = function (id) { return getDoc(doc(db, "reciboFiles", id)); };
+    window.APP.base64ToBlob = function (b64, type) {
+      const bin = atob(b64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return new Blob([bytes], { type: type || "application/pdf" });
+    };
     window.APP.serverTimestamp = serverTimestamp;
 
     window.APP.addBatch = (o) => addDoc(collection(db, "batches"), o);
@@ -1234,7 +1240,8 @@
         ? uploads.map((r) =>
             `<div class="row" style="justify-content:space-between">` +
             `<div>${A.esc(KO.windowLabel(r.monthKey, r.monthKey))} — ${A.esc(r.fileName)}</div>` +
-            `<button class="link" data-delrec="${r.id}">Delete</button></div>`).join("")
+            `<div><button class="link" data-getrec="${r.id}">Download</button> ` +
+            `<button class="link" data-delrec="${r.id}">Delete</button></div></div>`).join("")
         : "<p class='muted'>No RV PDFs uploaded for this customer.</p>";
       return `<div class="card"><h4>Upload RV PDF</h4>` +
         (linked
@@ -1320,6 +1327,32 @@
           const b = container.querySelector("#ruUpload"); if (b) b.disabled = false;
         }
       });
+
+      // File bytes live in reciboFiles and are fetched on demand, so the download
+      // is a blob URL clicked through a throwaway anchor rather than a plain link.
+      container.querySelectorAll("[data-getrec]").forEach((b) =>
+        b.addEventListener("click", async () => {
+          const setMsg = (t) => { const m = container.querySelector("#ruMsg"); if (m) m.textContent = t; };
+          const rec = A.state.recibos.find((r) => r.id === b.dataset.getrec);
+          b.disabled = true; setMsg("Downloading…");
+          try {
+            const snap = await A.fetchReciboFile(b.dataset.getrec);
+            if (!snap.exists()) { setMsg("That PDF is no longer stored."); b.disabled = false; return; }
+            const d = snap.data();
+            const url = URL.createObjectURL(A.base64ToBlob(d.data, d.contentType));
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = (rec && rec.fileName) || "recibo.pdf";
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 60000);
+            setMsg("Downloaded ✓");
+          } catch (ex) {
+            setMsg("Download failed: " + (ex.code || ex.message));
+          }
+          b.disabled = false;
+        }));
 
       container.querySelectorAll("[data-delrec]").forEach((b) =>
         b.addEventListener("click", async () => {
@@ -1553,13 +1586,6 @@
     function currentLang() { try { return localStorage.getItem("ko_lang") || "pt"; } catch (e) { return "pt"; } }
     const T = (k) => KO.t(currentLang(), k);
 
-    function base64ToBlob(b64, type) {
-      const bin = atob(b64);
-      const bytes = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-      return new Blob([bytes], { type: type || "application/pdf" });
-    }
-
     function myRecibos() {
       const uid = A.user ? A.user.uid : null;
       return A.state.recibos.filter((r) => r.customerUid === uid)
@@ -1708,7 +1734,7 @@
             const snap = await A.fetchReciboFile(b.dataset.getrec);
             if (!snap.exists()) { if (win) win.close(); setMsg(T("recibo_unavailable")); return; }
             const d = snap.data();
-            const url = URL.createObjectURL(base64ToBlob(d.data, d.contentType));
+            const url = URL.createObjectURL(A.base64ToBlob(d.data, d.contentType));
             if (win) win.location.href = url; else window.location.href = url;
             setTimeout(() => URL.revokeObjectURL(url), 60000);
           } catch (ex) {

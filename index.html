@@ -900,7 +900,8 @@
       const winTotals = KO.revenueByTypeInWindow(A.state.deliveries, sizes, A.state.customers, startMk, endMk);
       const byCust = KO.revenueByCustomerInWindow(A.state.deliveries, sizes, startMk, endMk);
       const flavours = KO.flavourCountsInWindow(A.state.deliveries, startMk, endMk);
-      const outstanding = KO.outstandingByCustomer(A.state.deliveries, sizes);
+      const outstanding = KO.outstandingByCustomer(A.state.deliveries, sizes).sort((a, b) =>
+        A.customerName(a.customerId).localeCompare(A.customerName(b.customerId)));
       const yearly = KO.revenueTypeByYear(A.state.deliveries, sizes, A.state.customers);
 
       const monthChart = KO.stackedBarChartSVG(

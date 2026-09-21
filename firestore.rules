@@ -27,6 +27,20 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Self-signup requests (from the QR code). A user may file only their own
+    // request; admins review and delete them. No update: re-submitting happens
+    // only after the admin deleted (rejected) the previous request.
+    match /signups/{uid} {
+      allow create: if signedIn() && request.auth.uid == uid
+                    && request.resource.data.uid == uid
+                    && request.resource.data.email == request.auth.token.email
+                    && request.resource.data.type in ["private", "restaurant"]
+                    && request.resource.data.name is string
+                    && request.resource.data.name.size() > 0;
+      allow read: if isAdmin() || (signedIn() && request.auth.uid == uid);
+      allow delete: if isAdmin();
+    }
+
     // Deliveries and everything revenue-related: admin only.
     match /deliveries/{id} {
       allow read, write: if isAdmin();

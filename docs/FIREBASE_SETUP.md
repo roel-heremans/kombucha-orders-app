@@ -45,3 +45,13 @@ This creates a new Firebase Auth user (using a secondary app instance so you sta
    - `uid` field: paste the UID.
    - `email` field: paste the email address.
 4. The restaurant can now log in with that email and password. The app matches them to their customer by `uid`.
+
+## Self-signup (QR code) rules — added 2026-09-21
+
+The QR-code signup writes requests to a new `signups` collection. After pulling
+this change, publish the updated rules: Firebase console → Firestore Database →
+**Rules** → paste the full contents of `firestore.rules` → **Publish**. Until
+then, new signups fail with `permission-denied`.
+
+Optional: Authentication → Templates → **Password reset** → set the template
+language to Portuguese, since the login screen's "Forgot password?" link uses it.

@@ -335,6 +335,12 @@
         window.APP.myCustomer = list[0] || null;
         window.APP.renderRestaurant();
       });
+      // Own signup request (drives the "pending approval" screen while unlinked).
+      window.APP.mySignup = undefined;
+      onSnapshot(doc(db, "signups", uid), (d) => {
+        window.APP.mySignup = d.exists() ? d.data() : null;
+        window.APP.renderRestaurant();
+      }, () => { window.APP.mySignup = null; window.APP.renderRestaurant(); });
       // Own orders.
       onSnapshot(query(collection(db, "orders"), where("customerUid", "==", uid)), (snap) => {
         S.orders.length = 0;
@@ -1816,6 +1822,36 @@
       return `<div class="row" style="justify-content:flex-end;gap:6px;align-items:center">${b("en", "EN")}<span class="muted">|</span>${b("pt", "PT")}</div>`;
     }
 
+    function installDismissed() { try { return localStorage.getItem("ko_install_dismissed") === "1"; } catch (e) { return false; } }
+    function installCardHtml() {
+      const standalone = (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || navigator.standalone === true;
+      const mode = KO.installMode(navigator.userAgent, standalone);
+      if (mode === "installed" || installDismissed()) return "";
+      if (mode === "prompt" && !A.installEvent) return ""; // browser hasn't offered install (yet)
+      return `<div class="card" id="installCard" style="display:flex;gap:12px;align-items:center">` +
+        `<img src="icons/icon-192.png" alt="" style="width:48px;height:48px;border-radius:10px;flex:0 0 48px">` +
+        `<div style="flex:1"><strong>${T("install_title")}</strong>` +
+          (mode === "ios" ? `<p class="muted" style="margin:4px 0">${T("install_ios")}</p>` : "") +
+          `<div class="row" style="gap:12px;margin-top:4px">` +
+            (mode === "prompt" ? `<button class="link" id="installBtn" style="font-weight:700">${T("install_btn")}</button>` : "") +
+            `<button class="link" id="installLater">${T("not_now")}</button></div></div></div>`;
+    }
+    function wireInstallCard() {
+      const later = body.querySelector("#installLater");
+      if (later) later.addEventListener("click", () => {
+        try { localStorage.setItem("ko_install_dismissed", "1"); } catch (e) {}
+        const c = body.querySelector("#installCard"); if (c) c.remove();
+      });
+      const btn = body.querySelector("#installBtn");
+      if (btn) btn.addEventListener("click", async () => {
+        const ev = A.installEvent; if (!ev) return;
+        A.installEvent = null;
+        ev.prompt();
+        try { await ev.userChoice; } catch (e) {}
+        render();
+      });
+    }
+
     function myOrders() {
       const uid = A.user ? A.user.uid : null;
       return A.state.orders.filter((o) => o.customerUid === uid).slice().sort((a, b) => {
@@ -1832,10 +1868,46 @@
       if (logoutBtn) logoutBtn.textContent = T("log_out");
       if (!A.state.settings) { body.innerHTML = `<p class='muted'>${T("loading")}</p>`; return; }
       if (!A.myCustomer) {
-        body.innerHTML = langToggleHtml(lang) + `<div class='card'><p>${T("not_linked")}</p></div>`;
-        body.querySelectorAll(".lang-btn").forEach((b) => b.addEventListener("click", () => {
-          try { localStorage.setItem("ko_lang", b.dataset.lang); } catch (e) {} render();
-        }));
+        title.textContent = "Real Health Kombucha";
+        const wire = () => {
+          body.querySelectorAll(".lang-btn").forEach((b) => b.addEventListener("click", () => {
+            try { localStorage.setItem("ko_lang", b.dataset.lang); } catch (e) {} render();
+          }));
+          wireInstallCard();
+        };
+        if (A.signupInFlight || A.mySignup === undefined) {
+          body.innerHTML = `<p class='muted'>${T("loading")}</p>`; return;
+        }
+        if (A.mySignup) {
+          body.innerHTML = langToggleHtml(lang) +
+            `<div class='card'><img src="icons/logo.png" alt="" style="display:block;max-width:200px;width:55%;margin:0 auto 8px">` +
+            `<p>${A.esc(T("pending_msg").replace("{name}", A.mySignup.name))}</p></div>` +
+            installCardHtml();
+          wire(); return;
+        }
+        // No request on file (rejected, or the write failed): let them re-submit.
+        body.innerHTML = langToggleHtml(lang) +
+          `<div class='card'><p>${T("complete_details")}</p>` +
+          `<label>${T("type_label")}</label><select id="rsType">` +
+            `<option value="private">${T("type_private")}</option><option value="restaurant">${T("type_restaurant")}</option></select>` +
+          `<label>${T("name_label")}</label><input id="rsName" type="text"/>` +
+          `<div id="rsContactWrap" class="hidden"><label>${T("contact_label")}</label><input id="rsContact" type="text"/></div>` +
+          `<label>${T("phone_label")}</label><input id="rsPhone" type="tel"/>` +
+          `<p id="rsErr" class="muted" style="color:#c0392b"></p>` +
+          `<button class="primary" id="rsSend">${T("submit_details")}</button></div>`;
+        wire();
+        body.querySelector("#rsType").addEventListener("change", (e) =>
+          body.querySelector("#rsContactWrap").classList.toggle("hidden", e.target.value !== "restaurant"));
+        body.querySelector("#rsSend").addEventListener("click", async (e) => {
+          const v = (id) => body.querySelector("#" + id).value;
+          const res = KO.validateSignup({ name: v("rsName"), type: v("rsType"), contact: v("rsContact"), phone: v("rsPhone") },
+            { skipCredentials: true });
+          const err = body.querySelector("#rsErr");
+          if (!res.ok) { err.textContent = res.errors.map(T).join(" "); return; }
+          e.target.disabled = true;
+          try { await A.fileSignup(res.data, lang); }
+          catch (ex) { err.textContent = T("send_failed") + " " + (ex.code || ex.message); e.target.disabled = false; }
+        });
         return;
       }
       title.textContent = A.myCustomer.name;
@@ -1862,7 +1934,7 @@
         }).join("");
 
       body.innerHTML =
-        langToggleHtml(lang) +
+        langToggleHtml(lang) + installCardHtml() +
         `<div class="card"><h3>${T("new_order")}</h3>` +
           `<div id="orderItems">${itemsInit}</div>` +
           `<button class="link" id="addOrderLine">${T("add_line")}</button>` +
@@ -1890,6 +1962,7 @@
       body.querySelectorAll(".lang-btn").forEach((b) => b.addEventListener("click", () => {
         try { localStorage.setItem("ko_lang", b.dataset.lang); } catch (e) {} render();
       }));
+      wireInstallCard();
 
       const itemsDiv = body.querySelector("#orderItems");
       body.querySelector("#addOrderLine").addEventListener("click", (e) => {

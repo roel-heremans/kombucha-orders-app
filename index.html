@@ -3,7 +3,14 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Kombucha Orders</title>
+  <title>Real Health Kombucha</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <meta name="theme-color" content="#1c392d" />
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Kombucha" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <style>
     :root { --green:#4a7c59; --bg:#faf9f6; --card:#fff; --line:#e3e1da; --text:#222; }
     * { box-sizing: border-box; }
@@ -40,7 +47,7 @@
   </style>
 </head>
 <body>
-  <header>🍶 Kombucha Orders</header>
+  <header><img src="icons/icon-192.png" alt="" style="width:22px;height:22px;border-radius:5px;vertical-align:-5px;margin-right:6px">Kombucha Orders</header>
   <div id="offlineBanner" class="banner hidden">Offline — changes will sync when back online</div>
 
   <!-- Login view -->
@@ -137,6 +144,15 @@
     window.APP = { app, auth, db, state: { customers: [], flavours: [], deliveries: [], orders: [], recibos: [], batches: [], stocktakes: [], settings: null }, current: {} };
     window.APP.loginNameDomain = LOGIN_NAME_DOMAIN; // expose to non-module script blocks (e.g. recibo upload handler)
     window.APP.esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("sw.js").catch((e) => console.warn("sw register failed:", e));
+    }
+    // Chrome/Android fire this when the app is installable; keep it for the install card.
+    window.addEventListener("beforeinstallprompt", (e) => {
+      e.preventDefault();
+      window.APP.installEvent = e;
+      if (window.APP.renderRestaurant) window.APP.renderRestaurant();
+    });
 
     // Online/offline banner
     const banner = document.getElementById("offlineBanner");

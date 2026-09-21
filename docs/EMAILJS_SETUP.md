@@ -2,10 +2,9 @@
 
 > **Currently OFF.** `EMAILJS_CONFIG.templateId` is blank, so no new-order email
 > is sent. The free tier allows only **2 templates**, and this alert duplicated
-> the CallMeBot WhatsApp message both admins already receive on every order, so
-> its template (`template_flxfpn9`) was reused for the app invite email — see
-> "App invite email" below. To bring it back you would need a third template
-> slot (a paid plan), or to give up one of the other two.
+> the CallMeBot WhatsApp message both admins already receive on every order.
+> To bring it back, just fill in `templateId` — the free tier's second slot is
+> free again now that the app-invite email that used to occupy it is gone.
 
 When a restaurant places an order, the app can email Roel + Nina. This is
 optional and off until configured. It uses EmailJS (client-side, free tier).

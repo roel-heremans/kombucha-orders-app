@@ -36,7 +36,11 @@ service cloud.firestore {
                     && request.resource.data.email == request.auth.token.email
                     && request.resource.data.type in ["private", "restaurant"]
                     && request.resource.data.name is string
-                    && request.resource.data.name.size() > 0;
+                    && request.resource.data.name.size() > 0
+                    && request.resource.data.keys().hasOnly(["uid","email","name","type","contact","phone","lang","createdAt"])
+                    && request.resource.data.name.size() <= 100
+                    && request.resource.data.contact is string && request.resource.data.contact.size() <= 100
+                    && request.resource.data.phone is string && request.resource.data.phone.size() <= 40;
       allow read: if isAdmin() || (signedIn() && request.auth.uid == uid);
       allow delete: if isAdmin();
     }
@@ -52,7 +56,8 @@ service cloud.firestore {
         (signedIn() && resource.data.customerUid == request.auth.uid);
       allow create: if isAdmin() ||
         (signedIn() && request.resource.data.customerUid == request.auth.uid
-                    && request.resource.data.status == "requested");
+                    && request.resource.data.status == "requested"
+                    && get(/databases/$(database)/documents/customers/$(request.resource.data.customerId)).data.uid == request.auth.uid);
       allow update: if isAdmin() ||
         (signedIn() && resource.data.customerUid == request.auth.uid
                     && resource.data.status == "requested"

@@ -157,7 +157,13 @@
     window.addEventListener("beforeinstallprompt", (e) => {
       e.preventDefault();
       window.APP.installEvent = e;
-      if (window.APP.renderRestaurant) window.APP.renderRestaurant();
+      // Don't wipe a half-typed form: only re-render if the user isn't
+      // currently focused in a field inside the restaurant view.
+      const active = document.activeElement;
+      const restaurantBody = document.getElementById("restaurantBody");
+      const focusedInForm = restaurantBody && active &&
+        ["INPUT", "TEXTAREA", "SELECT"].includes(active.tagName) && restaurantBody.contains(active);
+      if (!focusedInForm && window.APP.renderRestaurant) window.APP.renderRestaurant();
     });
 
     // Online/offline banner
@@ -212,6 +218,9 @@
 
     const signupView = document.getElementById("signupView");
     window.APP.wantSignup = new URLSearchParams(location.search).has("signup");
+    // Avoid a login-view flash before onAuthStateChanged decides; a signed-in
+    // user still gets their app because the `if (user)` path hides both views.
+    if (window.APP.wantSignup) loginView.classList.add("hidden");
     window.APP.showLogin = function () {
       window.APP.wantSignup = false;
       signupView.classList.add("hidden");
@@ -238,6 +247,8 @@
       if (!user) {
         appView.classList.add("hidden");
         restaurantView.classList.add("hidden");
+        window.APP.myCustomer = undefined;
+        window.APP.mySignup = undefined;
         if (window.APP.wantSignup) window.APP.showSignup(); else window.APP.showLogin();
         return;
       }
@@ -322,6 +333,7 @@
     };
 
     window.APP.onRestaurantLogin = function (uid) {
+      window.APP.myCustomer = undefined;
       // Reference data (rules allow any signed-in user to read these).
       const settingsRef = doc(db, "settings", "app");
       onSnapshot(settingsRef, (d) => { S.settings = d.exists() ? d.data() : DEFAULT_SETTINGS; window.APP.renderRestaurant(); });
@@ -374,6 +386,7 @@
     window.APP.updateCustomer = (id, o) => updateDoc(doc(db, "customers", id), o);
     window.APP.deleteCustomer = (id) => deleteDoc(doc(db, "customers", id));
     window.APP.approveSignupNew = function (s) {
+      if (S.customers.some((c) => c.uid === s.uid)) throw new Error("This login is already linked to a customer");
       const b = writeBatch(db);
       b.set(doc(collection(db, "customers")), window.KO.customerFromSignup(s));
       b.delete(doc(db, "signups", s.uid));
@@ -381,6 +394,8 @@
     };
     window.APP.approveSignupLink = function (s, customerId) {
       const c = S.customers.find((x) => x.id === customerId);
+      if (!c) throw new Error("Customer not found");
+      if (c.uid) throw new Error("That customer already has a login");
       const b = writeBatch(db);
       b.update(doc(db, "customers", customerId), window.KO.linkPatch(c, s));
       b.delete(doc(db, "signups", s.uid));
@@ -1561,6 +1576,7 @@
       if (!list.length) return "";
       const linkable = A.state.customers.filter((c) => !c.uid).sort((a, b) => a.name.localeCompare(b.name));
       return `<div class="card" style="border-color:#c0392b"><h4>Pending signups (${list.length})</h4>` +
+        `<p class="muted">Emails are not verified — if linking to an existing customer, confirm with them first (e.g. by phone).</p>` +
         list.map((s) =>
           `<div class="su-req" data-uid="${A.esc(s.uid)}" style="border-top:1px solid var(--line);padding-top:8px;margin-top:8px">` +
           `<div><strong>${A.esc(s.name)}</strong> <span class="pill pill-muted">${s.type === "private" ? "Private" : "Restaurant"}</span></div>` +
@@ -1953,7 +1969,7 @@
           }));
           wireInstallCard();
         };
-        if (A.signupInFlight || A.mySignup === undefined) {
+        if (A.signupInFlight || A.myCustomer === undefined || A.mySignup === undefined) {
           body.innerHTML = `<p class='muted'>${T("loading")}</p>`; return;
         }
         if (A.mySignup) {

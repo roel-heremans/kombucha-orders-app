@@ -53,6 +53,7 @@
   <!-- Login view -->
   <main id="loginView">
     <div class="card">
+      <img src="icons/logo.png" alt="Real Health Kombucha" style="display:block;max-width:220px;width:60%;margin:0 auto 8px">
       <h3>Log in</h3>
       <label>Email or name</label>
       <input id="loginEmail" type="text" autocomplete="username" />
@@ -60,8 +61,13 @@
       <input id="loginPassword" type="password" autocomplete="current-password" />
       <p id="loginError" class="muted"></p>
       <button class="primary" id="loginBtn">Log in</button>
+      <p style="margin-top:14px"><button class="link" id="forgotBtn">Forgot password? / Esqueceu-se da palavra-passe?</button></p>
+      <p><button class="link" id="toSignupBtn">New customer? Create an account / Novo cliente? Criar conta</button></p>
     </div>
   </main>
+
+  <!-- Self-signup view (reached from the QR code: ?signup) -->
+  <main id="signupView" class="hidden"></main>
 
   <!-- App view -->
   <div id="appView" class="hidden">
@@ -98,7 +104,7 @@
 
   <script src="lib.js"></script>
   <script type="module">
-    import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword }
+    import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, sendPasswordResetEmail }
       from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
     import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
     import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager }
@@ -173,16 +179,69 @@
 
     window.APP.logout = () => signOut(auth);
 
+    window.APP.resetPassword = (email) => sendPasswordResetEmail(auth, window.KO.loginEmail(email, LOGIN_NAME_DOMAIN));
+
+    window.APP.fileSignup = async function (data, lang) {
+      const u = auth.currentUser;
+      await setDoc(doc(db, "signups", u.uid), {
+        uid: u.uid, email: u.email, name: data.name, type: data.type,
+        contact: data.contact || "", phone: data.phone || "",
+        lang: lang || "pt", createdAt: new Date().toISOString(),
+      });
+      window.APP.notifyWhatsApp(window.KO.whatsappSignupText(data.name, data.type));
+    };
+
+    // Creates the login (which also signs the user in) then files the request.
+    // signupInFlight stops the customer view flashing the "complete your
+    // details" form in the moment between those two steps.
+    window.APP.signUp = async function (data, lang) {
+      window.APP.signupInFlight = true;
+      try {
+        await createUserWithEmailAndPassword(auth, data.email, data.password);
+        await window.APP.fileSignup(data, lang);
+        history.replaceState(null, "", location.pathname); // drop ?signup so logout lands on login
+        window.APP.wantSignup = false;
+      } finally {
+        window.APP.signupInFlight = false;
+        if (window.APP.renderRestaurant) window.APP.renderRestaurant();
+      }
+    };
+
     const restaurantView = document.getElementById("restaurantView");
     document.getElementById("restaurantLogout").addEventListener("click", () => signOut(auth));
 
+    const signupView = document.getElementById("signupView");
+    window.APP.wantSignup = new URLSearchParams(location.search).has("signup");
+    window.APP.showLogin = function () {
+      window.APP.wantSignup = false;
+      signupView.classList.add("hidden");
+      loginView.classList.remove("hidden");
+    };
+    window.APP.showSignup = function () {
+      window.APP.wantSignup = true;
+      loginView.classList.add("hidden");
+      signupView.classList.remove("hidden");
+      if (window.APP.renderSignup) window.APP.renderSignup();
+    };
+    document.getElementById("toSignupBtn").addEventListener("click", () => window.APP.showSignup());
+    document.getElementById("forgotBtn").addEventListener("click", async () => {
+      const typed = document.getElementById("loginEmail").value;
+      const err = document.getElementById("loginError");
+      if (!typed.includes("@")) { err.textContent = "Type your email above first. / Escreva primeiro o seu email acima."; return; }
+      try {
+        await window.APP.resetPassword(typed);
+        err.textContent = "Reset email sent — check your inbox. / Email enviado — veja a sua caixa de correio.";
+      } catch (e) { err.textContent = "Could not send reset email: " + e.code; }
+    });
+
     onAuthStateChanged(auth, (user) => {
       if (!user) {
-        loginView.classList.remove("hidden");
         appView.classList.add("hidden");
         restaurantView.classList.add("hidden");
+        if (window.APP.wantSignup) window.APP.showSignup(); else window.APP.showLogin();
         return;
       }
+      signupView.classList.add("hidden");
       window.APP.user = user;
       loginView.classList.add("hidden");
       if (ADMIN_EMAILS.includes(user.email)) {
@@ -1635,6 +1694,76 @@
     }
 
     A.renderers.settings = render;
+  });
+  </script>
+
+  <script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const A = window.APP, KO = window.KO;
+    const view = document.getElementById("signupView");
+    function lang() { try { return localStorage.getItem("ko_lang") || "pt"; } catch (e) { return "pt"; } }
+    const T = (k) => KO.t(lang(), k);
+    const keep = {}; // typed values survive a language switch
+
+    function field(id, label, type, extra) {
+      return `<label for="${id}">${label}</label><input id="${id}" type="${type}" value="${A.esc(keep[id] || "")}" ${extra || ""}/>`;
+    }
+
+    function render() {
+      const l = lang();
+      const b = (code, lbl) => `<button class="link su-lang" data-lang="${code}" style="${l === code ? "font-weight:700;text-decoration:underline" : ""}">${lbl}</button>`;
+      const type = keep.suType || "private";
+      view.innerHTML =
+        `<div class="row" style="justify-content:flex-end;gap:6px;align-items:center">${b("en", "EN")}<span class="muted">|</span>${b("pt", "PT")}</div>` +
+        `<div class="card">` +
+          `<img src="icons/logo.png" alt="Real Health Kombucha" style="display:block;max-width:220px;width:60%;margin:0 auto 8px">` +
+          `<h3>${T("signup_title")}</h3>` +
+          field("suEmail", T("email"), "email", `autocomplete="email"`) +
+          field("suPw", T("password"), "password", `autocomplete="new-password"`) +
+          field("suPw2", T("password2"), "password", `autocomplete="new-password"`) +
+          `<label for="suType">${T("type_label")}</label><select id="suType">` +
+            `<option value="private" ${type === "private" ? "selected" : ""}>${T("type_private")}</option>` +
+            `<option value="restaurant" ${type === "restaurant" ? "selected" : ""}>${T("type_restaurant")}</option></select>` +
+          field("suName", T("name_label"), "text", `autocomplete="name"`) +
+          `<div id="suContactWrap" class="${type === "restaurant" ? "" : "hidden"}">${field("suContact", T("contact_label"), "text")}</div>` +
+          field("suPhone", T("phone_label"), "tel", `autocomplete="tel"`) +
+          `<p id="suErr" class="muted" style="color:#c0392b"></p>` +
+          `<button class="primary" id="suSubmit">${T("create_account")}</button>` +
+          `<p style="margin-top:14px"><button class="link" id="suToLogin">${T("have_account")}</button></p>` +
+        `</div>`;
+
+      view.querySelectorAll("input,select").forEach((el) => el.addEventListener("input", () => {
+        keep[el.id] = el.value;
+        if (el.id === "suType") view.querySelector("#suContactWrap").classList.toggle("hidden", el.value !== "restaurant");
+      }));
+      view.querySelectorAll(".su-lang").forEach((btn) => btn.addEventListener("click", () => {
+        try { localStorage.setItem("ko_lang", btn.dataset.lang); } catch (e) {}
+        render();
+      }));
+      view.querySelector("#suToLogin").addEventListener("click", () => A.showLogin());
+      view.querySelector("#suSubmit").addEventListener("click", onSubmit);
+    }
+
+    async function onSubmit() {
+      const v = (id) => view.querySelector("#" + id).value;
+      const err = view.querySelector("#suErr");
+      const res = KO.validateSignup({
+        email: v("suEmail"), password: v("suPw"), password2: v("suPw2"),
+        name: v("suName"), type: v("suType"), contact: v("suContact"), phone: v("suPhone"),
+      });
+      if (!res.ok) { err.textContent = res.errors.map(T).join(" "); return; }
+      const btn = view.querySelector("#suSubmit");
+      btn.disabled = true; err.textContent = "";
+      try {
+        await A.signUp(res.data, lang());
+      } catch (e) {
+        err.textContent = e.code === "auth/email-already-in-use" ? T("err_email_in_use") : T("signup_failed") + " " + (e.code || e.message);
+        btn.disabled = false;
+      }
+    }
+
+    A.renderSignup = render;
+    if (A.wantSignup) render();
   });
   </script>
 

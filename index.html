@@ -79,7 +79,7 @@
       <button data-view="production">Production</button>
       <button data-view="recibo">Recibo</button>
       <button data-view="payments">Payments</button>
-      <button data-view="settings">Settings</button>
+      <button data-view="settings">Settings <span id="settingsBadge" class="badge hidden"></span></button>
     </nav>
     <main>
       <div id="view-new" class="view"></div>
@@ -147,7 +147,7 @@
     });
 
     // Expose to later-task code via a single namespace.
-    window.APP = { app, auth, db, state: { customers: [], flavours: [], deliveries: [], orders: [], recibos: [], batches: [], stocktakes: [], settings: null }, current: {} };
+    window.APP = { app, auth, db, state: { customers: [], flavours: [], deliveries: [], orders: [], recibos: [], batches: [], stocktakes: [], signups: [], settings: null }, current: {} };
     window.APP.loginNameDomain = LOGIN_NAME_DOMAIN; // expose to non-module script blocks (e.g. recibo upload handler)
     window.APP.esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
     if ("serviceWorker" in navigator) {
@@ -273,6 +273,7 @@
 
     window.APP.render = function () {
       if (window.APP.updateOrdersBadge) window.APP.updateOrdersBadge();
+      if (window.APP.updateSettingsBadge) window.APP.updateSettingsBadge();
       const active = document.querySelector("nav button.active");
       const view = active ? active.dataset.view : "new";
       if (window.APP.renderers[view]) window.APP.renderers[view]();
@@ -316,6 +317,7 @@
       watch("recibos", S.recibos);
       watch("batches", S.batches);
       watch("stocktakes", S.stocktakes);
+      watch("signups", S.signups);
       window.APP.render();
     };
 
@@ -371,6 +373,20 @@
     window.APP.addCustomer = (name, notes) => addDoc(collection(db, "customers"), { name, notes: notes || "" });
     window.APP.updateCustomer = (id, o) => updateDoc(doc(db, "customers", id), o);
     window.APP.deleteCustomer = (id) => deleteDoc(doc(db, "customers", id));
+    window.APP.approveSignupNew = function (s) {
+      const b = writeBatch(db);
+      b.set(doc(collection(db, "customers")), window.KO.customerFromSignup(s));
+      b.delete(doc(db, "signups", s.uid));
+      return b.commit();
+    };
+    window.APP.approveSignupLink = function (s, customerId) {
+      const c = S.customers.find((x) => x.id === customerId);
+      const b = writeBatch(db);
+      b.update(doc(db, "customers", customerId), window.KO.linkPatch(c, s));
+      b.delete(doc(db, "signups", s.uid));
+      return b.commit();
+    };
+    window.APP.rejectSignup = (uid) => deleteDoc(doc(db, "signups", uid));
     window.APP.addFlavour = (name) => addDoc(collection(db, "flavours"), { name });
     window.APP.deleteFlavour = (id) => deleteDoc(doc(db, "flavours", id));
     window.APP.saveSettings = (o) => setDoc(doc(db, "settings", "app"), o);
@@ -1510,6 +1526,7 @@
       `<div style="margin-bottom:4px">${emailBadge}</div>` +
       `<label>Name</label><input class="c-name" value="${A.esc(c.name)}"/>` +
       `<label>Contact person</label><input class="c-contact" value="${A.esc(c.contact||"")}"/>` +
+      `<label>Phone</label><input class="c-phone" type="tel" value="${A.esc(c.phone||"")}"/>` +
       `<div class="row"><div><label>Type</label><select class="c-type">` +
         `<option value="restaurant" ${(c.type||"restaurant")==="restaurant"?"selected":""}>Restaurant</option>` +
         `<option value="private" ${c.type==="private"?"selected":""}>Private</option>` +
@@ -1526,10 +1543,60 @@
             `<p class="muted c-invite-msg"></p></div>`
         : status === "synthetic"
           ? `<p class="muted">Name login — no inbox to invite.</p>`
-          : `<p class="muted">No login yet — create one in Customers Login below first.</p>`) +
+          : `<p class="muted">No login yet — send them the Invite QR, or use Manual login below.</p>`) +
       `<div class="row"><button class="link c-save">Save</button>` +
       `<button class="link" data-delcust="${c.id}" style="flex:0 0 60px">Delete</button></div>` +
       `</div>`;
+    }
+
+    function updateSettingsBadge() {
+      const el = document.getElementById("settingsBadge");
+      const n = A.state.signups.length;
+      el.textContent = n; el.classList.toggle("hidden", n === 0);
+    }
+    A.updateSettingsBadge = updateSettingsBadge;
+
+    function pendingSignupsHtml() {
+      const list = A.state.signups.slice().sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1));
+      if (!list.length) return "";
+      const linkable = A.state.customers.filter((c) => !c.uid).sort((a, b) => a.name.localeCompare(b.name));
+      return `<div class="card" style="border-color:#c0392b"><h4>Pending signups (${list.length})</h4>` +
+        list.map((s) =>
+          `<div class="su-req" data-uid="${A.esc(s.uid)}" style="border-top:1px solid var(--line);padding-top:8px;margin-top:8px">` +
+          `<div><strong>${A.esc(s.name)}</strong> <span class="pill pill-muted">${s.type === "private" ? "Private" : "Restaurant"}</span></div>` +
+          `<div class="muted">${A.esc(s.email)}${s.phone ? " · " + A.esc(s.phone) : ""}${s.contact ? " · contact: " + A.esc(s.contact) : ""}` +
+            ` · ${A.esc((s.createdAt || "").slice(0, 10))}</div>` +
+          `<div class="row" style="margin-top:6px"><button class="link su-new">Approve as new customer</button>` +
+          `<button class="link su-reject" style="flex:0 0 70px;color:#c0392b">Reject</button></div>` +
+          (linkable.length
+            ? `<div class="row"><select class="su-cust"><option value="">— or link to existing customer —</option>` +
+                linkable.map((c) => `<option value="${c.id}">${A.esc(c.name)}</option>`).join("") +
+              `</select><button class="link su-link" style="flex:0 0 50px">Link</button></div>`
+            : "") +
+          `<p class="muted su-msg"></p></div>`).join("") +
+        `</div>`;
+    }
+
+    function wirePendingSignups() {
+      container.querySelectorAll(".su-req").forEach((row) => {
+        const s = A.state.signups.find((x) => x.uid === row.dataset.uid);
+        const msg = row.querySelector(".su-msg");
+        const run = async (fn, okText) => {
+          row.querySelectorAll("button").forEach((b) => (b.disabled = true));
+          try { await fn(); A.toast(okText); }
+          catch (e) { msg.textContent = "Failed: " + (e.code || e.message); row.querySelectorAll("button").forEach((b) => (b.disabled = false)); }
+        };
+        row.querySelector(".su-new").addEventListener("click", () => run(() => A.approveSignupNew(s), "Approved " + s.name));
+        row.querySelector(".su-reject").addEventListener("click", () => {
+          if (confirm("Reject the signup from " + s.name + "?")) run(() => A.rejectSignup(s.uid), "Rejected " + s.name);
+        });
+        const link = row.querySelector(".su-link");
+        if (link) link.addEventListener("click", () => {
+          const cid = row.querySelector(".su-cust").value;
+          if (!cid) { msg.textContent = "Choose a customer to link to."; return; }
+          run(() => A.approveSignupLink(s, cid), s.name + " linked to " + A.customerName(cid));
+        });
+      });
     }
 
     function render() {
@@ -1542,6 +1609,7 @@
       const selCust = A.state.customers.find((c) => c.id === A.current.settingsCust) || null;
 
       container.innerHTML =
+        pendingSignupsHtml() +
         `<div class="card"><h4>Account</h4><p class="muted">${A.user ? A.user.email : ""}</p>` +
           `<button class="link" id="logoutBtn">Log out</button></div>` +
         `<div class="card"><details><summary>Bottle sizes &amp; prices</summary>` +
@@ -1571,8 +1639,15 @@
             `<div class="row"><div>${A.esc(f.name)}</div>` +
             `<button class="link" data-delflav="${f.id}" style="flex:0 0 60px">Delete</button></div>`).join("") +
           `</details></div>` +
-        `<div class="card"><details><summary>Customers Login</summary>` +
-          `<p class="muted">Create an app login so a restaurant can place their own orders.</p>` +
+        `<div class="card"><details><summary>Invite QR (self-signup)</summary>` +
+          `<p class="muted">Anyone who scans this can request an account; you approve them above.</p>` +
+          `<img src="qr/signup-qr.png" alt="Signup QR code" style="display:block;width:100%;max-width:280px;margin:8px auto">` +
+          `<p style="text-align:center"><a href="qr/signup-qr.png" download="real-health-kombucha-signup-qr.png">Download PNG</a> · ` +
+          `<a href="qr/signup-qr.svg" download="real-health-kombucha-signup-qr.svg">SVG</a></p>` +
+          `<p class="muted" style="word-break:break-all">https://roel-heremans.github.io/kombucha-orders-app/?signup</p>` +
+        `</details></div>` +
+        `<div class="card"><details><summary>Manual login (customers without email)</summary>` +
+          `<p class="muted">For customers without an email address (they can't use the QR signup). You choose the name and password and tell them yourself.</p>` +
           `<label>Customer</label><select id="rlCust">` +
             sortedCustomers.map((c) =>
               `<option value="${c.id}">${A.esc(c.name)}${c.uid ? " ✓ has login" : ""}</option>`).join("") +
@@ -1610,6 +1685,7 @@
             await A.updateCustomer(card.dataset.cid, {
               name: card.querySelector(".c-name").value.trim(),
               contact: card.querySelector(".c-contact").value.trim(),
+              phone: card.querySelector(".c-phone").value.trim(),
               type: card.querySelector(".c-type").value,
               nif: card.querySelector(".c-nif").value.trim(),
               notes: card.querySelector(".c-notes").value.trim(),
@@ -1697,6 +1773,8 @@
         }
         finally { rlCreate.disabled = false; }
       });
+
+      wirePendingSignups();
     }
 
     A.renderers.settings = render;

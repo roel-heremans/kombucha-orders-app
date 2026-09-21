@@ -741,3 +741,89 @@ test("zipStore de-duplicates repeated entry names", () => {
   assert.ok(text.includes("r.pdf"));
   assert.ok(text.includes("r (2).pdf"));
 });
+
+const GOOD_SIGNUP = {
+  email: "  Casa@Velha.PT ", password: "secret1", password2: "secret1",
+  name: "  Casa Velha ", type: "restaurant", contact: " Sr. Luis ", phone: " 912 ",
+};
+
+test("validateSignup accepts a good signup and normalises data", () => {
+  const r = KO.validateSignup(GOOD_SIGNUP);
+  assert.strictEqual(r.ok, true);
+  assert.deepStrictEqual(r.errors, []);
+  assert.deepStrictEqual(r.data, {
+    email: "casa@velha.pt", password: "secret1", name: "Casa Velha",
+    type: "restaurant", contact: "Sr. Luis", phone: "912",
+  });
+});
+
+test("validateSignup clears contact for private customers", () => {
+  const r = KO.validateSignup(Object.assign({}, GOOD_SIGNUP, { type: "private" }));
+  assert.strictEqual(r.ok, true);
+  assert.strictEqual(r.data.contact, "");
+});
+
+test("validateSignup reports each error code", () => {
+  const bad = (patch) => KO.validateSignup(Object.assign({}, GOOD_SIGNUP, patch)).errors;
+  assert.deepStrictEqual(bad({ email: "nope" }), ["err_email"]);
+  assert.deepStrictEqual(bad({ email: "a@b" }), ["err_email"]);
+  assert.deepStrictEqual(bad({ password: "12345", password2: "12345" }), ["err_pw_short"]);
+  assert.deepStrictEqual(bad({ password2: "other12" }), ["err_pw_match"]);
+  assert.deepStrictEqual(bad({ name: "   " }), ["err_name"]);
+  assert.deepStrictEqual(bad({ type: "vip" }), ["err_type"]);
+  assert.strictEqual(KO.validateSignup(Object.assign({}, GOOD_SIGNUP, { name: "" })).ok, false);
+});
+
+test("validateSignup skipCredentials ignores email and passwords", () => {
+  const r = KO.validateSignup({ name: "Ana", type: "private" }, { skipCredentials: true });
+  assert.strictEqual(r.ok, true);
+  assert.deepStrictEqual(r.data, { email: "", password: "", name: "Ana", type: "private", contact: "", phone: "" });
+});
+
+test("validateSignup tolerates missing fields", () => {
+  const r = KO.validateSignup({});
+  assert.deepStrictEqual(r.errors, ["err_email", "err_pw_short", "err_name", "err_type"]);
+});
+
+test("customerFromSignup builds a customer doc", () => {
+  assert.deepStrictEqual(KO.customerFromSignup({
+    uid: "u1", email: "a@b.pt", name: "Ana", type: "private", contact: "", phone: "91", lang: "pt", createdAt: "x",
+  }), { name: "Ana", type: "private", contact: "", phone: "91", email: "a@b.pt", uid: "u1", nif: "", notes: "" });
+  assert.deepStrictEqual(KO.customerFromSignup({ uid: "u2", email: "c@d.pt", name: "C", type: "restaurant" }),
+    { name: "C", type: "restaurant", contact: "", phone: "", email: "c@d.pt", uid: "u2", nif: "", notes: "" });
+});
+
+test("linkPatch fills only blank contact/phone and never name/type", () => {
+  const signup = { uid: "u1", email: "a@b.pt", name: "New Name", type: "private", contact: "Luis", phone: "91" };
+  assert.deepStrictEqual(KO.linkPatch({ name: "Old", type: "restaurant" }, signup),
+    { uid: "u1", email: "a@b.pt", contact: "Luis", phone: "91" });
+  assert.deepStrictEqual(KO.linkPatch({ name: "Old", contact: "Maria", phone: " 22 " }, signup),
+    { uid: "u1", email: "a@b.pt" });
+  assert.deepStrictEqual(KO.linkPatch({ name: "Old", contact: "  " }, Object.assign({}, signup, { contact: "", phone: "" })),
+    { uid: "u1", email: "a@b.pt" });
+});
+
+test("installMode detects installed / iOS / prompt", () => {
+  const IOS = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1";
+  const IPAD = "Mozilla/5.0 (iPad; CPU OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1";
+  const ANDROID = "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Mobile Safari/537.36";
+  assert.strictEqual(KO.installMode(IOS, true), "installed");
+  assert.strictEqual(KO.installMode(ANDROID, true), "installed");
+  assert.strictEqual(KO.installMode(IOS, false), "ios");
+  assert.strictEqual(KO.installMode(IPAD, false), "ios");
+  assert.strictEqual(KO.installMode(ANDROID, false), "prompt");
+  assert.strictEqual(KO.installMode("", false), "prompt");
+});
+
+test("whatsappSignupText names the signup and its type", () => {
+  assert.strictEqual(KO.whatsappSignupText("Casa Velha", "restaurant"),
+    "🆕 New signup — Casa Velha (restaurant). Approve in Settings.");
+});
+
+test("signup strings exist in both languages", () => {
+  ["signup_title", "err_email", "pending_msg", "install_ios", "complete_details"].forEach((k) => {
+    assert.notStrictEqual(KO.t("en", k), k);
+    assert.notStrictEqual(KO.t("pt", k), k);
+    assert.notStrictEqual(KO.t("pt", k), KO.t("en", k));
+  });
+});

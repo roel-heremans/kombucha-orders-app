@@ -77,6 +77,20 @@
       not_linked: "Your account isn't linked to a customer yet. Please contact us.",
       loading: "Loading…", status_requested: "Requested", status_delivered: "Delivered",
       status_cancelled: "Cancelled",
+      signup_title: "Create your account", email: "Email", password: "Password",
+      password2: "Repeat password", name_label: "Your name or business name",
+      type_label: "I am a", type_private: "Private customer", type_restaurant: "Restaurant / business",
+      contact_label: "Contact person", phone_label: "Phone (optional)",
+      create_account: "Create account", have_account: "Already have an account? Log in",
+      err_email: "Enter a valid email address.", err_pw_short: "The password needs at least 6 characters.",
+      err_pw_match: "The passwords don't match.", err_name: "Enter your name.",
+      err_type: "Choose a customer type.", err_email_in_use: "This email already has an account — log in instead.",
+      signup_failed: "Could not create the account:",
+      pending_msg: "Thanks, {name}! We'll activate your account shortly. You'll be able to order here as soon as it's approved.",
+      complete_details: "Complete your details so we can activate your account.",
+      submit_details: "Send", install_title: "Add Kombucha to your home screen?",
+      install_btn: "Install", not_now: "Not now",
+      install_ios: "Tap the Share button ⬆︎ at the bottom of Safari, then choose \"Add to Home Screen\".",
     },
     pt: {
       log_out: "Sair", new_order: "Novo pedido", size: "Tamanho", flavour: "Sabor",
@@ -94,6 +108,20 @@
       not_linked: "A sua conta ainda não está associada a um cliente. Contacte-nos, por favor.",
       loading: "A carregar…", status_requested: "Solicitado", status_delivered: "Entregue",
       status_cancelled: "Cancelado",
+      signup_title: "Criar a sua conta", email: "Email", password: "Palavra-passe",
+      password2: "Repetir palavra-passe", name_label: "O seu nome ou nome da empresa",
+      type_label: "Sou", type_private: "Cliente particular", type_restaurant: "Restaurante / empresa",
+      contact_label: "Pessoa de contacto", phone_label: "Telefone (opcional)",
+      create_account: "Criar conta", have_account: "Já tem conta? Entrar",
+      err_email: "Introduza um email válido.", err_pw_short: "A palavra-passe precisa de pelo menos 6 caracteres.",
+      err_pw_match: "As palavras-passe não coincidem.", err_name: "Introduza o seu nome.",
+      err_type: "Escolha o tipo de cliente.", err_email_in_use: "Este email já tem conta — entre com ele.",
+      signup_failed: "Não foi possível criar a conta:",
+      pending_msg: "Obrigado, {name}! Vamos ativar a sua conta em breve. Poderá encomendar aqui assim que for aprovada.",
+      complete_details: "Complete os seus dados para podermos ativar a sua conta.",
+      submit_details: "Enviar", install_title: "Adicionar a Kombucha ao ecrã principal?",
+      install_btn: "Instalar", not_now: "Agora não",
+      install_ios: "Toque no botão Partilhar ⬆︎ no fundo do Safari e escolha \"Adicionar ao ecrã principal\".",
     },
   };
 
@@ -553,6 +581,56 @@
     return isRealEmail(customer.email, syntheticDomain) ? "real" : "synthetic";
   }
 
+  function trimStr(v) { return String(v == null ? "" : v).trim(); }
+
+  function validateSignup(input, opts) {
+    const i = input || {};
+    const skip = !!(opts && opts.skipCredentials);
+    const type = trimStr(i.type);
+    const data = {
+      email: skip ? "" : trimStr(i.email).toLowerCase(),
+      password: skip ? "" : String(i.password == null ? "" : i.password),
+      name: trimStr(i.name),
+      type: type,
+      contact: type === "restaurant" ? trimStr(i.contact) : "",
+      phone: trimStr(i.phone),
+    };
+    const errors = [];
+    if (!skip) {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) errors.push("err_email");
+      if (data.password.length < 6) errors.push("err_pw_short");
+      else if (data.password !== String(i.password2 == null ? "" : i.password2)) errors.push("err_pw_match");
+    }
+    if (!data.name) errors.push("err_name");
+    if (type !== "private" && type !== "restaurant") errors.push("err_type");
+    return { ok: errors.length === 0, errors: errors, data: data };
+  }
+
+  function customerFromSignup(s) {
+    return {
+      name: s.name, type: s.type, contact: s.contact || "", phone: s.phone || "",
+      email: s.email, uid: s.uid, nif: "", notes: "",
+    };
+  }
+
+  // Attach a signup's login to an existing customer. Only fills contact/phone
+  // the customer doesn't already have; name and type are the admin's.
+  function linkPatch(customer, s) {
+    const p = { uid: s.uid, email: s.email };
+    if (!trimStr(customer && customer.contact) && trimStr(s.contact)) p.contact = trimStr(s.contact);
+    if (!trimStr(customer && customer.phone) && trimStr(s.phone)) p.phone = trimStr(s.phone);
+    return p;
+  }
+
+  function installMode(userAgent, isStandalone) {
+    if (isStandalone) return "installed";
+    return /iPhone|iPad|iPod/.test(String(userAgent || "")) ? "ios" : "prompt";
+  }
+
+  function whatsappSignupText(name, type) {
+    return "🆕 New signup — " + name + " (" + type + "). Approve in Settings.";
+  }
+
   function escapeXml(s) {
     return String(s).replace(/[<>&'"]/g, function (c) {
       return { "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" }[c];
@@ -788,5 +866,5 @@
     return out;
   }
 
-  return { formatMoney, sizeById, crc32, zipStore, deliveryRevenue, deliveryDepositRefund, monthKey, inMonth, monthName, dayOfMonth, recentMonthKeys, resolveWindow, monthKeysBetween, inWindow, revenueInWindow, revenueByCustomerInWindow, flavourCountsInWindow, windowLabel, monthlyRevenue, revenueByCustomer, monthlyRevenueSeries, flavourCounts, revenueByCustomerType, outstandingByCustomer, openPayments, reciboSizeLabel, reciboDocId, nextBatchNumber, formatBatchNumber, bottles1LForConversion, sizeLiters, soldLitersInWindow, productionSummary, actionMoment, producedPerSize, deliveredPerSize, latestStocktake, availableToSell, consumptionPeriods, sumConsumption, generateRecibo, orderItemsSummary, orderEmailParams, inviteEmailParams, whatsappOrderText, lastOrderItems, lastDeliveryItems, orderStatusLabel, loginEmail, isRealEmail, customerEmailStatus, barChartSVG, stackedBarChartSVG, revenueByTypeInWindow, revenueTypeSeries, revenueTypeByYear, t };
+  return { formatMoney, sizeById, crc32, zipStore, deliveryRevenue, deliveryDepositRefund, monthKey, inMonth, monthName, dayOfMonth, recentMonthKeys, resolveWindow, monthKeysBetween, inWindow, revenueInWindow, revenueByCustomerInWindow, flavourCountsInWindow, windowLabel, monthlyRevenue, revenueByCustomer, monthlyRevenueSeries, flavourCounts, revenueByCustomerType, outstandingByCustomer, openPayments, reciboSizeLabel, reciboDocId, nextBatchNumber, formatBatchNumber, bottles1LForConversion, sizeLiters, soldLitersInWindow, productionSummary, actionMoment, producedPerSize, deliveredPerSize, latestStocktake, availableToSell, consumptionPeriods, sumConsumption, generateRecibo, orderItemsSummary, orderEmailParams, inviteEmailParams, whatsappOrderText, lastOrderItems, lastDeliveryItems, orderStatusLabel, loginEmail, isRealEmail, customerEmailStatus, validateSignup, customerFromSignup, linkPatch, installMode, whatsappSignupText, barChartSVG, stackedBarChartSVG, revenueByTypeInWindow, revenueTypeSeries, revenueTypeByYear, t };
 });

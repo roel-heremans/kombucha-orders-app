@@ -194,6 +194,8 @@
         contact: data.contact || "", phone: data.phone || "",
         lang: lang || "pt", createdAt: new Date().toISOString(),
       });
+      window.APP.signupDraft = null;
+      window.APP.signupError = "";
       window.APP.notifyWhatsApp(window.KO.whatsappSignupText(data.name, data.type));
     };
 
@@ -204,9 +206,15 @@
       window.APP.signupInFlight = true;
       try {
         await createUserWithEmailAndPassword(auth, data.email, data.password);
-        await window.APP.fileSignup(data, lang);
         history.replaceState(null, "", location.pathname); // drop ?signup so logout lands on login
         window.APP.wantSignup = false;
+        try { await window.APP.fileSignup(data, lang); }
+        catch (e) {
+          // The login now exists, so the user lands on the re-submit form. Keep
+          // what they typed and say why it failed, instead of an empty form.
+          window.APP.signupDraft = data;
+          window.APP.signupError = e.code || e.message;
+        }
       } finally {
         window.APP.signupInFlight = false;
         if (window.APP.renderRestaurant) window.APP.renderRestaurant();
@@ -1979,15 +1987,18 @@
             installCardHtml();
           wire(); return;
         }
-        // No request on file (rejected, or the write failed): let them re-submit.
+        // No request on file (rejected, or the write failed): let them re-submit,
+        // pre-filled with what they typed at signup if that write failed.
+        const draft = A.signupDraft || {};
+        const isRest = draft.type === "restaurant";
         body.innerHTML = langToggleHtml(lang) +
           `<div class='card'><p>${T("complete_details")}</p>` +
           `<label>${T("type_label")}</label><select id="rsType">` +
-            `<option value="private">${T("type_private")}</option><option value="restaurant">${T("type_restaurant")}</option></select>` +
-          `<label>${T("name_label")}</label><input id="rsName" type="text"/>` +
-          `<div id="rsContactWrap" class="hidden"><label>${T("contact_label")}</label><input id="rsContact" type="text"/></div>` +
-          `<label>${T("phone_label")}</label><input id="rsPhone" type="tel"/>` +
-          `<p id="rsErr" class="muted" style="color:#c0392b"></p>` +
+            `<option value="private">${T("type_private")}</option><option value="restaurant" ${isRest ? "selected" : ""}>${T("type_restaurant")}</option></select>` +
+          `<label>${T("name_label")}</label><input id="rsName" type="text" value="${A.esc(draft.name || "")}"/>` +
+          `<div id="rsContactWrap" class="${isRest ? "" : "hidden"}"><label>${T("contact_label")}</label><input id="rsContact" type="text" value="${A.esc(draft.contact || "")}"/></div>` +
+          `<label>${T("phone_label")}</label><input id="rsPhone" type="tel" value="${A.esc(draft.phone || "")}"/>` +
+          `<p id="rsErr" class="muted" style="color:#c0392b">${A.signupError ? A.esc(T("send_failed") + " " + A.signupError) : ""}</p>` +
           `<button class="primary" id="rsSend">${T("submit_details")}</button></div>`;
         wire();
         body.querySelector("#rsType").addEventListener("change", (e) =>

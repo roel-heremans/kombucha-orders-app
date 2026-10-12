@@ -794,3 +794,18 @@ test("signup strings exist in both languages", () => {
     assert.notStrictEqual(KO.t("pt", k), KO.t("en", k));
   });
 });
+
+test("relinkWrites moves orders, recibos and files to the new login, customer last", () => {
+  const state = {
+    orders: [{ id: "o1", customerId: "C", customerUid: "old" }, { id: "o2", customerId: "X", customerUid: "x" }],
+    recibos: [{ id: "C_2026-09", customerId: "C", customerUid: "old" }, { id: "X_2026-09", customerId: "X", customerUid: "x" }],
+  };
+  assert.deepStrictEqual(KO.relinkWrites("C", { uid: "new", email: "a@b.pt" }, state), [
+    { col: "orders", id: "o1", data: { customerUid: "new" } },
+    { col: "recibos", id: "C_2026-09", data: { customerUid: "new" } },
+    { col: "reciboFiles", id: "C_2026-09", data: { customerUid: "new" } },
+    { col: "customers", id: "C", data: { uid: "new", email: "a@b.pt" } },
+  ]);
+  assert.deepStrictEqual(KO.relinkWrites("C", { uid: "n", email: "e" }, { orders: [], recibos: [] }),
+    [{ col: "customers", id: "C", data: { uid: "n", email: "e" } }]);
+});

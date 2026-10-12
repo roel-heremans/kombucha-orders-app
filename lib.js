@@ -606,6 +606,21 @@
     return p;
   }
 
+  // Writes that move a customer to another login. Matches by customerId, so a
+  // re-run after a partial failure picks up whatever is left. The customer doc
+  // comes last: it only points at the new login once everything else does.
+  function relinkWrites(customerId, login, state) {
+    const w = [];
+    (state.orders || []).filter((o) => o.customerId === customerId)
+      .forEach((o) => w.push({ col: "orders", id: o.id, data: { customerUid: login.uid } }));
+    (state.recibos || []).filter((r) => r.customerId === customerId).forEach((r) => {
+      w.push({ col: "recibos", id: r.id, data: { customerUid: login.uid } });
+      w.push({ col: "reciboFiles", id: r.id, data: { customerUid: login.uid } });
+    });
+    w.push({ col: "customers", id: customerId, data: { uid: login.uid, email: login.email } });
+    return w;
+  }
+
   function installMode(userAgent, isStandalone) {
     if (isStandalone) return "installed";
     return /iPhone|iPad|iPod/.test(String(userAgent || "")) ? "ios" : "prompt";
@@ -850,5 +865,5 @@
     return out;
   }
 
-  return { formatMoney, sizeById, crc32, zipStore, deliveryRevenue, deliveryDepositRefund, monthKey, inMonth, monthName, dayOfMonth, recentMonthKeys, resolveWindow, monthKeysBetween, inWindow, revenueInWindow, revenueByCustomerInWindow, flavourCountsInWindow, windowLabel, monthlyRevenue, revenueByCustomer, monthlyRevenueSeries, flavourCounts, revenueByCustomerType, outstandingByCustomer, openPayments, reciboSizeLabel, reciboDocId, nextBatchNumber, formatBatchNumber, bottles1LForConversion, sizeLiters, soldLitersInWindow, productionSummary, actionMoment, producedPerSize, deliveredPerSize, latestStocktake, availableToSell, consumptionPeriods, sumConsumption, generateRecibo, orderItemsSummary, orderEmailParams, whatsappOrderText, lastOrderItems, lastDeliveryItems, orderStatusLabel, loginEmail, isRealEmail, customerEmailStatus, validateSignup, customerFromSignup, linkPatch, installMode, whatsappSignupText, barChartSVG, stackedBarChartSVG, revenueByTypeInWindow, revenueTypeSeries, revenueTypeByYear, t };
+  return { formatMoney, sizeById, crc32, zipStore, deliveryRevenue, deliveryDepositRefund, monthKey, inMonth, monthName, dayOfMonth, recentMonthKeys, resolveWindow, monthKeysBetween, inWindow, revenueInWindow, revenueByCustomerInWindow, flavourCountsInWindow, windowLabel, monthlyRevenue, revenueByCustomer, monthlyRevenueSeries, flavourCounts, revenueByCustomerType, outstandingByCustomer, openPayments, reciboSizeLabel, reciboDocId, nextBatchNumber, formatBatchNumber, bottles1LForConversion, sizeLiters, soldLitersInWindow, productionSummary, actionMoment, producedPerSize, deliveredPerSize, latestStocktake, availableToSell, consumptionPeriods, sumConsumption, generateRecibo, orderItemsSummary, orderEmailParams, whatsappOrderText, lastOrderItems, lastDeliveryItems, orderStatusLabel, loginEmail, isRealEmail, customerEmailStatus, validateSignup, customerFromSignup, linkPatch, relinkWrites, installMode, whatsappSignupText, barChartSVG, stackedBarChartSVG, revenueByTypeInWindow, revenueTypeSeries, revenueTypeByYear, t };
 });

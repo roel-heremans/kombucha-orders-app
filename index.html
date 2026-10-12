@@ -402,11 +402,21 @@
     window.APP.approveSignupLink = function (s, customerId) {
       const c = S.customers.find((x) => x.id === customerId);
       if (!c) throw new Error("Customer not found");
-      if (c.uid) throw new Error("That customer already has a login");
-      const b = writeBatch(db);
-      b.update(doc(db, "customers", customerId), window.KO.linkPatch(c, s));
-      b.delete(doc(db, "signups", s.uid));
-      return b.commit();
+      if (S.customers.some((x) => x.uid === s.uid)) throw new Error("This login is already linked to a customer");
+      return window.APP.relinkCustomer(customerId, { uid: s.uid, email: s.email }, s.uid, window.KO.linkPatch(c, s));
+    };
+    // Point a customer at another login, moving their orders and recibos with
+    // them (those are visible only to the login whose uid they carry). Batches
+    // are chunked; the customer doc and signup removal go in the last one.
+    window.APP.relinkCustomer = async function (customerId, login, signupUid, extra) {
+      const writes = window.KO.relinkWrites(customerId, login, S);
+      if (extra) Object.assign(writes[writes.length - 1].data, extra);
+      for (let i = 0; i < writes.length; i += 400) {
+        const b = writeBatch(db);
+        writes.slice(i, i + 400).forEach((w) => b.update(doc(db, w.col, w.id), w.data));
+        if (i + 400 >= writes.length && signupUid) b.delete(doc(db, "signups", signupUid));
+        await b.commit();
+      }
     };
     window.APP.rejectSignup = (uid) => deleteDoc(doc(db, "signups", uid));
     window.APP.addFlavour = (name) => addDoc(collection(db, "flavours"), { name });
@@ -521,8 +531,8 @@
       try {
         const secAuth = getAuth(secondary);
         const cred = await createUserWithEmailAndPassword(secAuth, loginId, password);
-        await updateDoc(doc(db, "customers", customerId), { uid: cred.user.uid, email: loginId });
         await signOut(secAuth);
+        await window.APP.relinkCustomer(customerId, { uid: cred.user.uid, email: loginId });
       } finally {
         if (secondary) await deleteApp(secondary);
       }
@@ -1531,6 +1541,14 @@
       (status === "none"
         ? `<p class="muted">No login yet — send them the Invite QR, or use Manual login below.</p>`
         : "") +
+      (status !== "none"
+        ? `<details class="c-relogin"><summary>Change login</summary>` +
+            `<p class="muted">Creates a new login and moves this customer's orders and recibos to it. The old login stops working for this customer. ` +
+            `If the new email already has an account, ask them to log in with it and send their details, then link their request (Pending signups, above) to this customer.</p>` +
+            `<label>New login email or name</label><input class="c-newlogin" type="text"/>` +
+            `<label>Initial password</label><input class="c-newpw" type="text"/>` +
+            `<button class="link c-relink">Change login</button><p class="muted c-relinkmsg"></p></details>`
+        : "") +
       `<div class="row"><button class="link c-save">Save</button>` +
       `<button class="link" data-delcust="${c.id}" style="flex:0 0 60px">Delete</button></div>` +
       `</div>`;
@@ -1546,7 +1564,7 @@
     function pendingSignupsHtml() {
       const list = A.state.signups.slice().sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1));
       if (!list.length) return "";
-      const linkable = A.state.customers.filter((c) => !c.uid).sort((a, b) => a.name.localeCompare(b.name));
+      const linkable = A.state.customers.slice().sort((a, b) => a.name.localeCompare(b.name));
       return `<div class="card" style="border-color:#c0392b"><h4>Pending signups (${list.length})</h4>` +
         `<p class="muted">Emails are not verified — if linking to an existing customer, confirm with them first (e.g. by phone).</p>` +
         list.map((s) =>
@@ -1558,7 +1576,7 @@
           `<button class="link su-reject" style="flex:0 0 70px;color:#c0392b">Reject</button></div>` +
           (linkable.length
             ? `<div class="row"><select class="su-cust"><option value="">— or link to existing customer —</option>` +
-                linkable.map((c) => `<option value="${c.id}">${A.esc(c.name)}</option>`).join("") +
+                linkable.map((c) => `<option value="${c.id}">${A.esc(c.name)}${c.uid ? " (replaces login)" : ""}</option>`).join("") +
               `</select><button class="link su-link" style="flex:0 0 50px">Link</button></div>`
             : "") +
           `<p class="muted su-msg"></p></div>`).join("") +
@@ -1582,6 +1600,9 @@
         if (link) link.addEventListener("click", () => {
           const cid = row.querySelector(".su-cust").value;
           if (!cid) { msg.textContent = "Choose a customer to link to."; return; }
+          const target = A.state.customers.find((c) => c.id === cid);
+          if (target && target.uid && !confirm(A.customerName(cid) + " already has a login (" + (target.email || "") +
+            "). Replace it with " + s.email + "? Their orders and recibos move to the new login.")) return;
           run(() => A.approveSignupLink(s, cid), s.name + " linked to " + A.customerName(cid));
         });
       });
@@ -1681,6 +1702,26 @@
             save.textContent = "Saved ✓";
           } catch (e) { save.textContent = "Save failed"; }
         });
+        const relink = card.querySelector(".c-relink");
+        if (relink) relink.addEventListener("click", async () => {
+          const msg = card.querySelector(".c-relinkmsg");
+          const email = card.querySelector(".c-newlogin").value.trim();
+          const pw = card.querySelector(".c-newpw").value;
+          if (!email || pw.length < 6) { msg.textContent = "Enter an email or name, and a password of 6+ chars."; return; }
+          if (!confirm("Change the login of " + A.customerName(card.dataset.cid) + " to " + email + "?")) return;
+          relink.disabled = true; msg.textContent = "Changing…";
+          try {
+            await A.createRestaurantLogin(card.dataset.cid, email, pw);
+            A.toast("Login changed — they now log in with \"" + email + "\" and the password you set.");
+          } catch (ex) {
+            const m = container.querySelector('.cust-edit[data-cid="' + card.dataset.cid + '"] .c-relinkmsg');
+            const txt = ex.code === "auth/email-already-in-use"
+              ? "That email already has an account. Ask them to log in with it and send their details, then link their request (Pending signups) to this customer."
+              : "Failed: " + (ex.code || ex.message);
+            if (m) m.textContent = txt;
+            relink.disabled = false;
+          }
+        });
       });
 
       container.querySelectorAll("[data-delcust]").forEach((b) =>
@@ -1720,6 +1761,8 @@
         const email = container.querySelector("#rlEmail").value.trim();
         const pw = container.querySelector("#rlPw").value;
         if (!customerId || !email || pw.length < 6) { msg.textContent = "Choose a customer, an email or name, and a password of 6+ chars."; return; }
+        const rlTarget = A.state.customers.find((c) => c.id === customerId);
+        if (rlTarget && rlTarget.uid && !confirm(A.customerName(customerId) + " already has a login. Replace it? Their orders and recibos move to the new login.")) return;
         rlCreate.disabled = true; msg.textContent = "Creating…";
         try {
           await A.createRestaurantLogin(customerId, email, pw);

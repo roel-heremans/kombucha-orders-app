@@ -104,7 +104,9 @@
     <main id="restaurantBody" style="padding:16px"></main>
   </div>
 
-  <script src="lib.js"></script>
+  <!-- Bump ?v= whenever lib.js changes: GitHub Pages lets browsers cache lib.js for 10 min,
+       so a new index.html could otherwise run against an old lib.js. -->
+  <script src="lib.js?v=2026-10-12"></script>
   <script type="module">
     import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, sendPasswordResetEmail }
       from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";

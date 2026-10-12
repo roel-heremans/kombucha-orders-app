@@ -146,7 +146,7 @@
     });
 
     // Expose to later-task code via a single namespace.
-    window.APP = { app, auth, db, state: { customers: [], flavours: [], deliveries: [], orders: [], recibos: [], batches: [], stocktakes: [], signups: [], settings: null }, current: {} };
+    window.APP = { app, auth, db, state: { customers: [], flavours: [], deliveries: [], orders: [], recibos: [], batches: [], stocktakes: [], signups: [], expenses: [], expenseItems: [], expenseCategories: [], settings: null }, current: {} };
     window.APP.loginNameDomain = LOGIN_NAME_DOMAIN; // expose to non-module script blocks (e.g. recibo upload handler)
     window.APP.esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
     if ("serviceWorker" in navigator) {
@@ -302,6 +302,8 @@
 
     window.APP.customerName = (id) => (S.customers.find((c) => c.id === id) || {}).name || "(unknown)";
     window.APP.flavourName = (id) => (S.flavours.find((f) => f.id === id) || {}).name || "(unknown)";
+    window.APP.expenseItemName = (id) => (S.expenseItems.find((x) => x.id === id) || {}).name || "(unknown)";
+    window.APP.expenseCategoryName = (id) => (!id ? "(no category)" : (S.expenseCategories.find((x) => x.id === id) || {}).name || "(unknown)");
 
     const DEFAULT_SETTINGS = {
       reciboHeader: "OUT - Kombucha Produto",
@@ -336,6 +338,9 @@
       watch("batches", S.batches);
       watch("stocktakes", S.stocktakes);
       watch("signups", S.signups);
+      watch("expenses", S.expenses);
+      watch("expenseItems", S.expenseItems);
+      watch("expenseCategories", S.expenseCategories);
       window.APP.render();
     };
 
@@ -442,6 +447,39 @@
       return batch.commit();
     };
     window.APP.fetchReciboFile = function (id) { return getDoc(doc(db, "reciboFiles", id)); };
+    window.APP.addExpenseCategory = (name) => addDoc(collection(db, "expenseCategories"), { name });
+    window.APP.updateExpenseCategory = (id, o) => updateDoc(doc(db, "expenseCategories", id), o);
+    window.APP.deleteExpenseCategory = (id) => deleteDoc(doc(db, "expenseCategories", id));
+    window.APP.addExpenseItem = (o) => addDoc(collection(db, "expenseItems"), { name: o.name, categoryId: o.categoryId, unit: o.unit || "" });
+    window.APP.updateExpenseItem = (id, o) => updateDoc(doc(db, "expenseItems", id), o);
+    window.APP.deleteExpenseItem = (id) => deleteDoc(doc(db, "expenseItems", id));
+    // receipt: undefined = keep (none on create), null = remove, {data, contentType, name} = set.
+    // Metadata and file bytes go in one batch so they never disagree.
+    window.APP.saveExpense = async function (id, data, receipt) {
+      const ref = id ? doc(db, "expenses", id) : doc(collection(db, "expenses"));
+      const d = Object.assign({}, data);
+      const b = writeBatch(db);
+      if (receipt) {
+        Object.assign(d, { hasReceipt: true, receiptName: receipt.name, receiptType: receipt.contentType });
+        b.set(doc(db, "expenseFiles", ref.id), { data: receipt.data, contentType: receipt.contentType });
+      } else if (receipt === null) {
+        Object.assign(d, { hasReceipt: false, receiptName: "", receiptType: "" });
+        b.delete(doc(db, "expenseFiles", ref.id));
+      } else if (!id) {
+        Object.assign(d, { hasReceipt: false, receiptName: "", receiptType: "" });
+      }
+      if (id) b.update(ref, d);
+      else { d.createdAt = serverTimestamp(); b.set(ref, d); }
+      await b.commit();
+      return ref.id;
+    };
+    window.APP.deleteExpense = function (id) {
+      const b = writeBatch(db);
+      b.delete(doc(db, "expenses", id));
+      b.delete(doc(db, "expenseFiles", id));
+      return b.commit();
+    };
+    window.APP.fetchExpenseFile = (id) => getDoc(doc(db, "expenseFiles", id));
     window.APP.base64ToBlob = function (b64, type) {
       const bin = atob(b64);
       const bytes = new Uint8Array(bin.length);
@@ -1746,6 +1784,8 @@
           settings: A.state.settings, customers: A.state.customers,
           flavours: A.state.flavours, deliveries: A.state.deliveries,
           orders: A.state.orders,
+          expenses: A.state.expenses, expenseItems: A.state.expenseItems,
+          expenseCategories: A.state.expenseCategories,
         };
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
         const url = URL.createObjectURL(blob);

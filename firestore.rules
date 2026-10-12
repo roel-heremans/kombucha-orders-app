@@ -82,5 +82,18 @@ service cloud.firestore {
     match /stocktakes/{id} {
       allow read, write: if isAdmin();
     }
+    // Expenses (admin only). File bytes live in expenseFiles under the expense id.
+    match /expenses/{id} {
+      allow read, write: if isAdmin();
+    }
+    match /expenseItems/{id} {
+      allow read, write: if isAdmin();
+    }
+    match /expenseCategories/{id} {
+      allow read, write: if isAdmin();
+    }
+    match /expenseFiles/{id} {
+      allow read, write: if isAdmin();
+    }
   }
 }

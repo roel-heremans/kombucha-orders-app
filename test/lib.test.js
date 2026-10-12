@@ -886,3 +886,11 @@ test("receiptKind classifies by type, falling back to file name", () => {
   assert.strictEqual(KO.receiptKind("", "IMG_1234.HEIC"), "image");
   assert.strictEqual(KO.receiptKind("application/vnd.openxmlformats-officedocument.wordprocessingml.document", "a.docx"), null);
 });
+
+test("validateExpense: amount must be at least one cent after rounding", () => {
+  const base = { date: "2026-10-12", time: "09:05", itemId: "tea" };
+  assert.ok(KO.validateExpense({ ...base, amount: "0,004" }).errors.includes("amount_invalid"));
+  const r = KO.validateExpense({ ...base, amount: "0,005" });
+  assert.strictEqual(r.ok, true);
+  assert.strictEqual(r.data.amount, 0.01);
+});

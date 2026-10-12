@@ -639,7 +639,7 @@
     if (!/^\d{2}:\d{2}$/.test(time)) errors.push("time_invalid");
     if (!itemId || itemId === "__new__") errors.push("item_required");
     const amount = parseAmount(input.amount);
-    if (!(amount > 0)) errors.push("amount_invalid");
+    if (!(Math.round(amount * 100) > 0)) errors.push("amount_invalid");
     const qRaw = input.quantity;
     const qEmpty = qRaw === null || qRaw === undefined || String(qRaw).trim() === "";
     const quantity = qEmpty ? null : parseAmount(qRaw);

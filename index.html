@@ -449,15 +449,22 @@
       return batch.commit();
     };
     window.APP.fetchReciboFile = function (id) { return getDoc(doc(db, "reciboFiles", id)); };
-    window.APP.addExpenseCategory = (name) => addDoc(collection(db, "expenseCategories"), { name });
+    // add* return {id, done}: the write applies locally at once; `done` settles on server ack (or fails).
+    window.APP.addExpenseCategory = function (name) {
+      const ref = doc(collection(db, "expenseCategories"));
+      return { id: ref.id, done: setDoc(ref, { name }) };
+    };
     window.APP.updateExpenseCategory = (id, o) => updateDoc(doc(db, "expenseCategories", id), o);
     window.APP.deleteExpenseCategory = (id) => deleteDoc(doc(db, "expenseCategories", id));
-    window.APP.addExpenseItem = (o) => addDoc(collection(db, "expenseItems"), { name: o.name, categoryId: o.categoryId, unit: o.unit || "" });
+    window.APP.addExpenseItem = function (o) {
+      const ref = doc(collection(db, "expenseItems"));
+      return { id: ref.id, done: setDoc(ref, { name: o.name, categoryId: o.categoryId, unit: o.unit || "" }) };
+    };
     window.APP.updateExpenseItem = (id, o) => updateDoc(doc(db, "expenseItems", id), o);
     window.APP.deleteExpenseItem = (id) => deleteDoc(doc(db, "expenseItems", id));
     // receipt: undefined = keep (none on create), null = remove, {data, contentType, name} = set.
     // Metadata and file bytes go in one batch so they never disagree.
-    window.APP.saveExpense = async function (id, data, receipt) {
+    window.APP.saveExpense = function (id, data, receipt) {
       const ref = id ? doc(db, "expenses", id) : doc(collection(db, "expenses"));
       const d = Object.assign({}, data);
       const b = writeBatch(db);
@@ -472,8 +479,7 @@
       }
       if (id) b.update(ref, d);
       else { d.createdAt = serverTimestamp(); b.set(ref, d); }
-      await b.commit();
-      return ref.id;
+      return { id: ref.id, done: b.commit() };
     };
     window.APP.deleteExpense = function (id) {
       const b = writeBatch(db);
@@ -942,6 +948,7 @@
     let editing = null;       // expense being edited, or null
     let receipt;              // undefined = keep/none, null = remove, {data, contentType, name, size}
     let processing = false;
+    let fileToken = 0;        // bumped on reset/edit/new file so stale processing results are ignored
 
     const ERR = {
       item_required: "Choose an item.", amount_invalid: "Enter an amount above 0.",
@@ -997,7 +1004,9 @@
             const { w, h } = KO.scaleToFit(img.naturalWidth, img.naturalHeight, 1600);
             const canvas = document.createElement("canvas");
             canvas.width = w; canvas.height = h;
-            canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+            const ctx = canvas.getContext("2d");
+            ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, w, h);
+            ctx.drawImage(img, 0, 0, w, h);
             const s = canvas.toDataURL("image/jpeg", 0.8);
             resolve(s.slice(s.indexOf(",") + 1));
           } catch (e) { reject(e); }
@@ -1040,8 +1049,11 @@
     }
     function updateItemInfo() {
       const it = selectedItem();
-      container.querySelector("#exCat").textContent = it ? A.expenseCategoryName(it.categoryId) : "—";
-      container.querySelector("#exQtyLabel").textContent = "Quantity" + (it && it.unit ? " (" + it.unit + ")" : "");
+      const keep = it && editing && editing.itemId === it.id;
+      const catId = keep ? editing.categoryId : it && it.categoryId;
+      const unit = keep ? editing.unit : it && it.unit;
+      container.querySelector("#exCat").textContent = it ? A.expenseCategoryName(catId) : "—";
+      container.querySelector("#exQtyLabel").textContent = "Quantity" + (unit ? " (" + unit + ")" : "");
     }
 
     function buildForm() {
@@ -1108,9 +1120,9 @@
       updateItemInfo();
     }
 
-    function resetForm() { editing = null; receipt = undefined; processing = false; built = false; render(); }
+    function resetForm() { fileToken++; editing = null; receipt = undefined; processing = false; built = false; render(); }
 
-    async function onAddItem(ev) {
+    function onAddItem(ev) {
       ev.preventDefault();
       const err = container.querySelector("#exNiErr");
       const name = container.querySelector("#exNiName").value.trim();
@@ -1120,14 +1132,21 @@
       if (!name) { err.textContent = "Enter the item name."; return; }
       if (A.state.expenseItems.some((x) => x.name.toLowerCase() === name.toLowerCase())) { err.textContent = "That item already exists."; return; }
       if (!catId || (catId === "__new__" && !newCat)) { err.textContent = "Choose or enter a category."; return; }
-      ev.target.disabled = true;
+      const failed = (e) => A.toast("Could not add item: " + (e.code || e.message), true);
       try {
         if (catId === "__new__") {
           const existing = A.state.expenseCategories.find((c) => c.name.toLowerCase() === newCat.toLowerCase());
-          catId = existing ? existing.id : (await A.addExpenseCategory(newCat)).id;
+          if (existing) catId = existing.id;
+          else {
+            const c = A.addExpenseCategory(newCat);
+            c.done.catch(failed);
+            catId = c.id;
+            // The snapshot may not have arrived yet; add locally so the item's category resolves.
+            if (!A.state.expenseCategories.some((x) => x.id === c.id)) A.state.expenseCategories.push({ id: c.id, name: newCat });
+          }
         }
-        const ref = await A.addExpenseItem({ name, categoryId: catId, unit });
-        // The snapshot for the new item may not have arrived yet; add it locally so it can be selected.
+        const ref = A.addExpenseItem({ name, categoryId: catId, unit });
+        ref.done.catch(failed);
         if (!A.state.expenseItems.some((x) => x.id === ref.id)) A.state.expenseItems.push({ id: ref.id, name, categoryId: catId, unit });
         refreshOptions();
         container.querySelector("#exItem").value = ref.id;
@@ -1136,20 +1155,26 @@
         err.textContent = "";
         updateItemInfo();
       } catch (e) { err.textContent = "Failed: " + (e.code || e.message); }
-      finally { ev.target.disabled = false; }
     }
 
     async function onFileChosen(ev) {
       const file = ev.target.files && ev.target.files[0];
       const err = container.querySelector("#exErr");
       if (!file) return;
+      const token = ++fileToken;
       processing = true; err.textContent = ""; updateReceiptInfo();
-      try { receipt = await processReceipt(file); }
-      catch (e) { receipt = undefined; ev.target.value = ""; err.textContent = e.message; }
-      finally { processing = false; updateReceiptInfo(); }
+      try {
+        const r = await processReceipt(file);
+        if (token !== fileToken) return;
+        receipt = r;
+      } catch (e) {
+        if (token !== fileToken) return;
+        receipt = undefined; ev.target.value = ""; err.textContent = e.message;
+      }
+      processing = false; updateReceiptInfo();
     }
 
-    async function onSave(ev) {
+    function onSave(ev) {
       ev.preventDefault();
       const err = container.querySelector("#exErr");
       const v = (id) => container.querySelector("#" + id).value;
@@ -1158,17 +1183,20 @@
       if (!res.ok) { err.textContent = res.errors.map((c) => ERR[c] || c).join(" "); return; }
       const it = A.state.expenseItems.find((x) => x.id === res.data.itemId);
       if (!it) { err.textContent = ERR.item_required; return; }
-      const data = Object.assign({}, res.data, { categoryId: it.categoryId || "", unit: it.unit || "" });
+      // Editing the same item keeps the category/unit the expense was entered with.
+      const keep = editing && editing.itemId === res.data.itemId;
+      const data = Object.assign({}, res.data, keep
+        ? { categoryId: editing.categoryId || "", unit: editing.unit || "" }
+        : { categoryId: it.categoryId || "", unit: it.unit || "" });
       if (!editing) data.enteredBy = A.user ? A.user.email : "";
-      ev.target.disabled = true; err.textContent = "";
-      try {
-        await A.saveExpense(editing ? editing.id : null, data, receipt);
-        A.toast(editing ? "Expense updated ✓" : "Expense saved ✓");
-        resetForm();
-      } catch (e) {
-        err.textContent = "Save failed: " + (e.code || e.message);
-        ev.target.disabled = false;
-      }
+      err.textContent = "";
+      // The write applies locally at once; the server ack (or failure) arrives later via `done`.
+      let saved;
+      try { saved = A.saveExpense(editing ? editing.id : null, data, receipt); }
+      catch (e) { err.textContent = "Save failed: " + (e.code || e.message); return; }
+      saved.done.catch((e) => A.toast("Save failed: " + (e.code || e.message), true));
+      A.toast(editing ? "Expense updated ✓" : "Expense saved ✓");
+      resetForm();
     }
 
     function listHtml() {
@@ -1191,6 +1219,33 @@
         `<p id="exListMsg" class="muted"></p></div>`;
     }
 
+    // Images open in an in-app overlay (window.open/blob navigation is unreliable in an iOS PWA); PDFs download.
+    function openReceipt(blob, type, name) {
+      const url = URL.createObjectURL(blob);
+      if (!/^image\//.test(type || "")) {
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = String(name || "").replace(/[^\w.\- ]+/g, "_") || "receipt.pdf";
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+        return;
+      }
+      const ov = document.createElement("div");
+      ov.style.cssText = "position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.85);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:12px";
+      const img = document.createElement("img");
+      img.src = url;
+      img.style.cssText = "max-width:100%;max-height:calc(100% - 56px);object-fit:contain";
+      img.addEventListener("click", (e) => e.stopPropagation());
+      const btn = document.createElement("button");
+      btn.textContent = "✕ Close";
+      btn.style.cssText = "margin-top:12px;padding:10px 20px;font-size:16px;width:auto";
+      const close = () => { ov.remove(); URL.revokeObjectURL(url); };
+      ov.addEventListener("click", close);
+      btn.addEventListener("click", (e) => { e.stopPropagation(); close(); });
+      ov.append(img, btn);
+      document.body.appendChild(ov);
+    }
+
     function renderList() {
       const wrap = container.querySelector("#exListWrap");
       wrap.innerHTML = listHtml();
@@ -1200,29 +1255,27 @@
       wrap.querySelectorAll("[data-exedit]").forEach((b) => b.addEventListener("click", () => {
         const e = A.state.expenses.find((x) => x.id === b.dataset.exedit);
         if (!e) return;
-        editing = e; receipt = undefined; processing = false; built = false; render();
+        fileToken++; editing = e; receipt = undefined; processing = false; built = false; render();
         window.scrollTo(0, 0);
       }));
-      wrap.querySelectorAll("[data-exdel]").forEach((b) => b.addEventListener("click", async () => {
+      wrap.querySelectorAll("[data-exdel]").forEach((b) => b.addEventListener("click", () => {
         if (!confirm("Delete this expense?")) return;
-        try {
-          await A.deleteExpense(b.dataset.exdel);
-          if (editing && editing.id === b.dataset.exdel) resetForm();
-          A.toast("Expense deleted");
-        } catch (e) { A.toast("Delete failed: " + (e.code || e.message), true); }
+        const id = b.dataset.exdel;
+        try { A.deleteExpense(id).catch((e) => A.toast("Delete failed: " + (e.code || e.message), true)); }
+        catch (e) { A.toast("Delete failed: " + (e.code || e.message), true); return; }
+        if (editing && editing.id === id) resetForm();
+        A.toast("Expense deleted");
       }));
       wrap.querySelectorAll("[data-exfile]").forEach((b) => b.addEventListener("click", async () => {
-        const win = window.open("", "_blank");
         const setMsg = (t) => { const m = container.querySelector("#exListMsg"); if (m) m.textContent = t; };
         try {
           const snap = await A.fetchExpenseFile(b.dataset.exfile);
-          if (!snap.exists()) { if (win) win.close(); setMsg("Receipt not available."); return; }
+          if (!snap.exists()) { setMsg("Receipt not available."); return; }
           const d = snap.data();
-          const url = URL.createObjectURL(A.base64ToBlob(d.data, d.contentType));
-          if (win) win.location.href = url; else window.location.href = url;
-          setTimeout(() => URL.revokeObjectURL(url), 60000);
+          const exp = A.state.expenses.find((x) => x.id === b.dataset.exfile);
+          openReceipt(A.base64ToBlob(d.data, d.contentType), d.contentType, exp && exp.receiptName);
+          setMsg("");
         } catch (ex) {
-          if (win) win.close();
           setMsg("Could not open the receipt: " + (ex.code || ex.message));
         }
       }));
@@ -2144,7 +2197,7 @@
         row.querySelector(".ec-del").addEventListener("click", async () => {
           if (A.state.expenseItems.some((it) => it.categoryId === id)) { alert("Cannot delete: items belong to this category. Move them first."); return; }
           if (A.state.expenses.some((x) => x.categoryId === id)) { alert("Cannot delete: expenses use this category."); return; }
-          if (confirm("Delete this category?")) await A.deleteExpenseCategory(id);
+          if (confirm("Delete this category?")) A.deleteExpenseCategory(id).catch((ex) => A.toast("Delete failed: " + (ex.code || ex.message), true));
         });
       });
       container.querySelectorAll(".eitem-edit").forEach((row) => {
@@ -2159,7 +2212,7 @@
         });
         row.querySelector(".ei-del").addEventListener("click", async () => {
           if (A.state.expenses.some((x) => x.itemId === id)) { alert("Cannot delete: expenses use this item."); return; }
-          if (confirm("Delete this item?")) await A.deleteExpenseItem(id);
+          if (confirm("Delete this item?")) A.deleteExpenseItem(id).catch((ex) => A.toast("Delete failed: " + (ex.code || ex.message), true));
         });
       });
 

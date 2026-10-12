@@ -55,3 +55,11 @@ then, new signups fail with `permission-denied`.
 
 Optional: Authentication → Templates → **Password reset** → set the template
 language to Portuguese, since the login screen's "Forgot password?" link uses it.
+
+## Expenses rules — added 2026-10-12
+
+The Expenses tab writes to four new admin-only collections: `expenses`,
+`expenseItems`, `expenseCategories`, and `expenseFiles`. After pulling this
+change, publish the updated rules: Firebase console → Firestore Database →
+**Rules** → paste the full contents of `firestore.rules` → **Publish**. Until
+then, the Expenses tab fails to load with `permission-denied`.

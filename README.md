@@ -20,7 +20,10 @@ Firestore, so two people can enter deliveries and see the same stats.
   (bottle size + flavour + quantity), and empties received back per size.
 - **Deliveries list** — review, edit, delete past deliveries.
 - **Dashboard** — monthly revenue, revenue share by customer, outstanding
-  bottles and deposit held, flavour popularity.
+  bottles and deposit held, flavour popularity, and (for admins) profit, expenses
+  by category, and monthly profit trend.
+- **Expenses** — admin-only tracking of item costs (with categories, units,
+  quantities, optional receipt photos/PDFs, and notes).
 - **Recibo Verde** — pick a customer + month and copy-paste the description text
   (delivery dates, bottle types/amounts, deposit returns, and the netted total).
 - **Two-account shared data** — you and your wife each log in and see the same

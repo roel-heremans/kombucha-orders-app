@@ -1994,6 +1994,28 @@
             `<div class="row"><div>${A.esc(f.name)}</div>` +
             `<button class="link" data-delflav="${f.id}" style="flex:0 0 60px">Delete</button></div>`).join("") +
           `</details></div>` +
+        `<div class="card"><details><summary>Expense categories (${A.state.expenseCategories.length})</summary>` +
+          (A.state.expenseCategories.length ? A.state.expenseCategories.slice().sort((a,b)=>a.name.localeCompare(b.name)).map((c) =>
+            `<div class="row ecat-edit" data-ecid="${c.id}"><div><input class="ec-name" value="${A.esc(c.name)}"/></div>` +
+            `<button class="link ec-save" style="flex:0 0 50px">Save</button>` +
+            `<button class="link ec-del" style="flex:0 0 60px">Delete</button></div>`).join("")
+            : `<p class="muted">None yet — add them from the Expenses tab.</p>`) +
+          `</details></div>` +
+        `<div class="card"><details><summary>Expense items (${A.state.expenseItems.length})</summary>` +
+          (A.state.expenseItems.length ? A.state.expenseItems.slice().sort((a,b)=>a.name.localeCompare(b.name)).map((it) =>
+            `<div class="eitem-edit" data-eiid="${it.id}" style="border-top:1px solid var(--line);padding-top:8px;margin-top:8px">` +
+            `<label>Name</label><input class="ei-name" value="${A.esc(it.name)}"/>` +
+            `<div class="row"><div><label>Category</label><select class="ei-cat">` +
+              A.state.expenseCategories.slice().sort((a,b)=>a.name.localeCompare(b.name)).map((c) =>
+                `<option value="${c.id}" ${c.id === it.categoryId ? "selected" : ""}>${A.esc(c.name)}</option>`).join("") +
+              (A.state.expenseCategories.some((c) => c.id === it.categoryId) ? "" : `<option value="${A.esc(it.categoryId || "")}" selected>(unknown)</option>`) +
+            `</select></div>` +
+            `<div><label>Unit</label><input class="ei-unit" value="${A.esc(it.unit || "")}"/></div></div>` +
+            `<div class="row"><button class="link ei-save">Save</button>` +
+            `<button class="link ei-del" style="flex:0 0 60px">Delete</button></div></div>`).join("")
+            : `<p class="muted">None yet — add them from the Expenses tab.</p>`) +
+          `<p class="muted">Changing an item's category only affects new expenses; saved expenses keep the category they were entered with.</p>` +
+          `</details></div>` +
         `<div class="card"><details><summary>Invite QR (self-signup)</summary>` +
           `<p class="muted">Anyone who scans this can request an account; you approve them above.</p>` +
           `<img src="qr/signup-qr.png" alt="Signup QR code" style="display:block;width:100%;max-width:280px;margin:8px auto">` +
@@ -2085,6 +2107,35 @@
           if (flavourInUse(b.dataset.delflav)) { alert("Cannot delete: this flavour is used by deliveries."); return; }
           if (confirm("Delete this flavour?")) await A.deleteFlavour(b.dataset.delflav);
         }));
+      container.querySelectorAll(".ecat-edit").forEach((row) => {
+        const id = row.dataset.ecid;
+        row.querySelector(".ec-save").addEventListener("click", async (e) => {
+          const name = row.querySelector(".ec-name").value.trim();
+          if (!name) { alert("Name can't be empty."); return; }
+          try { await A.updateExpenseCategory(id, { name }); A.toast("Category saved ✓"); }
+          catch (ex) { A.toast("Save failed: " + (ex.code || ex.message), true); }
+        });
+        row.querySelector(".ec-del").addEventListener("click", async () => {
+          if (A.state.expenseItems.some((it) => it.categoryId === id)) { alert("Cannot delete: items belong to this category. Move them first."); return; }
+          if (A.state.expenses.some((x) => x.categoryId === id)) { alert("Cannot delete: expenses use this category."); return; }
+          if (confirm("Delete this category?")) await A.deleteExpenseCategory(id);
+        });
+      });
+      container.querySelectorAll(".eitem-edit").forEach((row) => {
+        const id = row.dataset.eiid;
+        row.querySelector(".ei-save").addEventListener("click", async () => {
+          const name = row.querySelector(".ei-name").value.trim();
+          if (!name) { alert("Name can't be empty."); return; }
+          try {
+            await A.updateExpenseItem(id, { name, categoryId: row.querySelector(".ei-cat").value, unit: row.querySelector(".ei-unit").value.trim() });
+            A.toast("Item saved ✓");
+          } catch (ex) { A.toast("Save failed: " + (ex.code || ex.message), true); }
+        });
+        row.querySelector(".ei-del").addEventListener("click", async () => {
+          if (A.state.expenses.some((x) => x.itemId === id)) { alert("Cannot delete: expenses use this item."); return; }
+          if (confirm("Delete this item?")) await A.deleteExpenseItem(id);
+        });
+      });
 
       container.querySelector("#exportBtn").addEventListener("click", () => {
         const data = {

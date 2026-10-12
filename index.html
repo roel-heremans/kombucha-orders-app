@@ -1358,6 +1358,18 @@
         A.customerName(a.customerId).localeCompare(A.customerName(b.customerId)));
       const yearly = KO.revenueTypeByYear(A.state.deliveries, sizes, A.state.customers);
 
+      const expTotal = KO.expensesInWindow(A.state.expenses, startMk, endMk);
+      const profit = Math.round((winTotals.total - expTotal) * 100) / 100;
+      const expByCat = KO.expensesByCategoryInWindow(A.state.expenses, startMk, endMk);
+      const profitRows = KO.profitSeries(A.state.deliveries, A.state.expenses, sizes, startMk, endMk);
+      const expCatChart = KO.barChartSVG(
+        expByCat.map((c) => ({ label: A.expenseCategoryName(c.categoryId).slice(0, 10), title: A.expenseCategoryName(c.categoryId), value: c.amount })),
+        { format: euro, rotate: true });
+      const expMonthChart = KO.barChartSVG(
+        profitRows.map((r) => ({ label: KO.monthName(r.monthKey).slice(0, 3), title: KO.windowLabel(r.monthKey, r.monthKey), value: r.expenses })),
+        { format: euro });
+      const red = (v) => (v < 0 ? ` style="color:#c0392b"` : "");
+
       const monthChart = KO.stackedBarChartSVG(
         typeBars(typeSeries, (r) => ({ label: KO.monthName(r.monthKey).slice(0, 3), tipLabel: KO.windowLabel(r.monthKey, r.monthKey) })),
         {});
@@ -1389,6 +1401,20 @@
           `<p class="muted">Private ${euro(winTotals.private)} · Restaurant ${euro(winTotals.restaurant)}</p>` +
           `<div class="chartwrap"><div class="chart-tip muted">Tap a bar to see its value</div>${monthChart}</div>` +
           typeLegend + `</div>` +
+        `<div class="card"><h3${red(profit)}>Profit (${A.esc(label)}): ${euro(profit)}</h3>` +
+          `<table><tr><td>Revenue</td><td>${euro(winTotals.total)}</td></tr>` +
+          `<tr><td>Expenses</td><td>${euro(expTotal)}</td></tr></table></div>` +
+        `<div class="card"><h4>Expenses by category</h4>` +
+          (expByCat.length ? `<div class="chartwrap"><div class="chart-tip muted">Tap a bar to see its value</div>${expCatChart}</div>` +
+            "<table>" + expByCat.map((c) =>
+              `<tr><td>${A.esc(A.expenseCategoryName(c.categoryId))}</td><td>${euro(c.amount)}</td></tr>`).join("") + "</table>"
+            : "<p class='muted'>No expenses in this window.</p>") + `</div>` +
+        `<div class="card"><h4>Monthly profit</h4>` +
+          (profitRows.some((r) => r.expenses > 0) ? `<div class="chartwrap"><div class="chart-tip muted">Expenses per month — tap a bar</div>${expMonthChart}</div>` : "") +
+          `<table><tr><th>Month</th><th>Revenue</th><th>Expenses</th><th>Profit</th></tr>` +
+          profitRows.map((r) =>
+            `<tr><td>${A.esc(KO.windowLabel(r.monthKey, r.monthKey))}</td><td>${euro(r.revenue)}</td><td>${euro(r.expenses)}</td>` +
+            `<td${red(r.profit)}>${euro(r.profit)}</td></tr>`).join("") + `</table></div>` +
         `<div class="card"><h4>Yearly revenue (all years)</h4>` +
           (yearly.length ? `<div class="chartwrap"><div class="chart-tip muted">Tap a bar to see its value</div>${yearChart}</div>` + typeLegend
             : "<p class='muted'>No revenue yet.</p>") + `</div>` +

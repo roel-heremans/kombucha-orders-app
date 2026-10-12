@@ -621,6 +621,78 @@
     return w;
   }
 
+  // Amounts typed on a phone may use a decimal comma ("12,50").
+  function parseAmount(v) {
+    if (v === null || v === undefined) return NaN;
+    if (typeof v === "number") return v;
+    const s = String(v).trim().replace(",", ".");
+    if (s === "" || !/^-?\d*\.?\d+$/.test(s)) return NaN;
+    return parseFloat(s);
+  }
+
+  function validateExpense(input) {
+    const errors = [];
+    const date = String(input.date || "");
+    const time = String(input.time || "");
+    const itemId = String(input.itemId || "");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) errors.push("date_invalid");
+    if (!/^\d{2}:\d{2}$/.test(time)) errors.push("time_invalid");
+    if (!itemId || itemId === "__new__") errors.push("item_required");
+    const amount = parseAmount(input.amount);
+    if (!(amount > 0)) errors.push("amount_invalid");
+    const qRaw = input.quantity;
+    const qEmpty = qRaw === null || qRaw === undefined || String(qRaw).trim() === "";
+    const quantity = qEmpty ? null : parseAmount(qRaw);
+    if (!qEmpty && !(quantity > 0)) errors.push("quantity_invalid");
+    if (errors.length) return { ok: false, errors: errors, data: null };
+    return { ok: true, errors: [], data: {
+      date: date, time: time, itemId: itemId, quantity: quantity,
+      amount: Math.round(amount * 100) / 100, note: String(input.note || "").trim(),
+    } };
+  }
+
+  function expensesInWindow(expenses, startMk, endMk) {
+    return (expenses || []).reduce(function (sum, e) {
+      return e.date && inWindow(e.date, startMk, endMk) ? sum + (e.amount || 0) : sum;
+    }, 0);
+  }
+
+  function expensesByCategoryInWindow(expenses, startMk, endMk) {
+    const byId = {};
+    (expenses || []).forEach(function (e) {
+      if (!e.date || !inWindow(e.date, startMk, endMk)) return;
+      const k = e.categoryId || "";
+      byId[k] = (byId[k] || 0) + (e.amount || 0);
+    });
+    return Object.keys(byId)
+      .map(function (k) { return { categoryId: k, amount: Math.round(byId[k] * 100) / 100 }; })
+      .sort(function (a, b) { return b.amount - a.amount || (a.categoryId < b.categoryId ? -1 : a.categoryId > b.categoryId ? 1 : 0); });
+  }
+
+  function profitSeries(deliveries, expenses, sizes, startMk, endMk) {
+    const r2 = function (n) { return Math.round(n * 100) / 100; };
+    return monthKeysBetween(startMk, endMk).map(function (mk) {
+      const revenue = r2(revenueInWindow(deliveries, sizes, mk, mk));
+      const exp = r2(expensesInWindow(expenses, mk, mk));
+      return { monthKey: mk, revenue: revenue, expenses: exp, profit: r2(revenue - exp) };
+    });
+  }
+
+  function scaleToFit(w, h, maxSide) {
+    const long = Math.max(w, h);
+    if (long <= maxSide) return { w: w, h: h };
+    const f = maxSide / long;
+    return { w: Math.round(w * f), h: Math.round(h * f) };
+  }
+
+  function receiptKind(type, name) {
+    const t = String(type || "").toLowerCase();
+    const n = String(name || "").toLowerCase();
+    if (t === "application/pdf" || /\.pdf$/.test(n)) return "pdf";
+    if (t.indexOf("image/") === 0 || /\.(jpe?g|png|webp|gif|heic|heif)$/.test(n)) return "image";
+    return null;
+  }
+
   function installMode(userAgent, isStandalone) {
     if (isStandalone) return "installed";
     return /iPhone|iPad|iPod/.test(String(userAgent || "")) ? "ios" : "prompt";
@@ -865,5 +937,5 @@
     return out;
   }
 
-  return { formatMoney, sizeById, crc32, zipStore, deliveryRevenue, deliveryDepositRefund, monthKey, inMonth, monthName, dayOfMonth, recentMonthKeys, resolveWindow, monthKeysBetween, inWindow, revenueInWindow, revenueByCustomerInWindow, flavourCountsInWindow, windowLabel, monthlyRevenue, revenueByCustomer, monthlyRevenueSeries, flavourCounts, revenueByCustomerType, outstandingByCustomer, openPayments, reciboSizeLabel, reciboDocId, nextBatchNumber, formatBatchNumber, bottles1LForConversion, sizeLiters, soldLitersInWindow, productionSummary, actionMoment, producedPerSize, deliveredPerSize, latestStocktake, availableToSell, consumptionPeriods, sumConsumption, generateRecibo, orderItemsSummary, orderEmailParams, whatsappOrderText, lastOrderItems, lastDeliveryItems, orderStatusLabel, loginEmail, isRealEmail, customerEmailStatus, validateSignup, customerFromSignup, linkPatch, relinkWrites, installMode, whatsappSignupText, barChartSVG, stackedBarChartSVG, revenueByTypeInWindow, revenueTypeSeries, revenueTypeByYear, t };
+  return { formatMoney, sizeById, crc32, zipStore, deliveryRevenue, deliveryDepositRefund, monthKey, inMonth, monthName, dayOfMonth, recentMonthKeys, resolveWindow, monthKeysBetween, inWindow, revenueInWindow, revenueByCustomerInWindow, flavourCountsInWindow, windowLabel, monthlyRevenue, revenueByCustomer, monthlyRevenueSeries, flavourCounts, revenueByCustomerType, outstandingByCustomer, openPayments, reciboSizeLabel, reciboDocId, nextBatchNumber, formatBatchNumber, bottles1LForConversion, sizeLiters, soldLitersInWindow, productionSummary, actionMoment, producedPerSize, deliveredPerSize, latestStocktake, availableToSell, consumptionPeriods, sumConsumption, generateRecibo, orderItemsSummary, orderEmailParams, whatsappOrderText, lastOrderItems, lastDeliveryItems, orderStatusLabel, loginEmail, isRealEmail, customerEmailStatus, validateSignup, customerFromSignup, linkPatch, relinkWrites, parseAmount, validateExpense, expensesInWindow, expensesByCategoryInWindow, profitSeries, scaleToFit, receiptKind, installMode, whatsappSignupText, barChartSVG, stackedBarChartSVG, revenueByTypeInWindow, revenueTypeSeries, revenueTypeByYear, t };
 });

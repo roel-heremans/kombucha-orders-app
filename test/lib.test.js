@@ -809,3 +809,80 @@ test("relinkWrites moves orders, recibos and files to the new login, customer la
   assert.deepStrictEqual(KO.relinkWrites("C", { uid: "n", email: "e" }, { orders: [], recibos: [] }),
     [{ col: "customers", id: "C", data: { uid: "n", email: "e" } }]);
 });
+
+test("parseAmount accepts comma or dot decimals", () => {
+  assert.strictEqual(KO.parseAmount("12,50"), 12.5);
+  assert.strictEqual(KO.parseAmount(" 3.2 "), 3.2);
+  assert.strictEqual(KO.parseAmount(7), 7);
+  assert.ok(Number.isNaN(KO.parseAmount("")));
+  assert.ok(Number.isNaN(KO.parseAmount(null)));
+  assert.ok(Number.isNaN(KO.parseAmount("abc")));
+});
+
+test("validateExpense accepts a full expense and normalises it", () => {
+  const r = KO.validateExpense({ date: "2026-10-12", time: "09:05", itemId: "tea", quantity: "2,5", amount: "12,346", note: "  bio  " });
+  assert.deepStrictEqual(r, { ok: true, errors: [],
+    data: { date: "2026-10-12", time: "09:05", itemId: "tea", quantity: 2.5, amount: 12.35, note: "bio" } });
+});
+
+test("validateExpense: quantity and note are optional", () => {
+  const r = KO.validateExpense({ date: "2026-10-12", time: "09:05", itemId: "tea", quantity: "", amount: 4 });
+  assert.strictEqual(r.ok, true);
+  assert.strictEqual(r.data.quantity, null);
+  assert.strictEqual(r.data.note, "");
+});
+
+test("validateExpense reports every problem", () => {
+  const r = KO.validateExpense({ date: "12/10/2026", time: "9h", itemId: "", quantity: "-1", amount: "0" });
+  assert.strictEqual(r.ok, false);
+  assert.strictEqual(r.data, null);
+  assert.deepStrictEqual(r.errors.sort(),
+    ["amount_invalid", "date_invalid", "item_required", "quantity_invalid", "time_invalid"]);
+  assert.deepStrictEqual(KO.validateExpense({ date: "2026-10-12", time: "09:05", itemId: "__new__", amount: 1 }).errors, ["item_required"]);
+});
+
+const EXP = [
+  { date: "2026-09-03", categoryId: "ing", amount: 10 },
+  { date: "2026-09-20", categoryId: "bot", amount: 30.1 },
+  { date: "2026-10-01", categoryId: "ing", amount: 5.2 },
+  { date: "2026-10-02", amount: 1 },                    // no category (item deleted / old data)
+  { date: "2026-11-01", categoryId: "ing", amount: 99 },
+];
+
+test("expensesInWindow sums amounts inside the window", () => {
+  assert.strictEqual(KO.formatMoney(KO.expensesInWindow(EXP, "2026-09", "2026-10")), "46.30");
+  assert.strictEqual(KO.expensesInWindow(EXP, "2026-12", "2026-12"), 0);
+  assert.strictEqual(KO.expensesInWindow([], "2026-09", "2026-09"), 0);
+});
+
+test("expensesByCategoryInWindow groups and sorts desc, unknown category as ''", () => {
+  assert.deepStrictEqual(KO.expensesByCategoryInWindow(EXP, "2026-09", "2026-10"), [
+    { categoryId: "bot", amount: 30.1 },
+    { categoryId: "ing", amount: 15.2 },
+    { categoryId: "", amount: 1 },
+  ]);
+});
+
+test("profitSeries gives revenue, expenses and profit per month", () => {
+  // DELIVS (top of this file): Jun 2026 revenue = 2*8 + 2*8 + 10*4.5 + 4*4.5 = 95; Jul = 8
+  const exp = [{ date: "2026-06-10", categoryId: "ing", amount: 100.004 }, { date: "2026-07-02", categoryId: "x", amount: 3 }];
+  assert.deepStrictEqual(KO.profitSeries(DELIVS, exp, SIZES, "2026-06", "2026-08"), [
+    { monthKey: "2026-06", revenue: 95, expenses: 100, profit: -5 },
+    { monthKey: "2026-07", revenue: 8, expenses: 3, profit: 5 },
+    { monthKey: "2026-08", revenue: 0, expenses: 0, profit: 0 },
+  ]);
+});
+
+test("scaleToFit shrinks the long side to maxSide, keeps aspect", () => {
+  assert.deepStrictEqual(KO.scaleToFit(4032, 3024, 1600), { w: 1600, h: 1200 });
+  assert.deepStrictEqual(KO.scaleToFit(3024, 4032, 1600), { w: 1200, h: 1600 });
+  assert.deepStrictEqual(KO.scaleToFit(800, 600, 1600), { w: 800, h: 600 });
+});
+
+test("receiptKind classifies by type, falling back to file name", () => {
+  assert.strictEqual(KO.receiptKind("application/pdf", "a.pdf"), "pdf");
+  assert.strictEqual(KO.receiptKind("", "FATURA.PDF"), "pdf");
+  assert.strictEqual(KO.receiptKind("image/jpeg", "x.jpg"), "image");
+  assert.strictEqual(KO.receiptKind("", "IMG_1234.HEIC"), "image");
+  assert.strictEqual(KO.receiptKind("application/vnd.openxmlformats-officedocument.wordprocessingml.document", "a.docx"), null);
+});

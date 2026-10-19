@@ -106,7 +106,7 @@
 
   <!-- Bump ?v= whenever lib.js changes: GitHub Pages lets browsers cache lib.js for 10 min,
        so a new index.html could otherwise run against an old lib.js. -->
-  <script src="lib.js?v=2026-10-12"></script>
+  <script src="lib.js?v=2026-10-19"></script>
   <script type="module">
     import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, sendPasswordResetEmail }
       from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
@@ -1746,6 +1746,23 @@
     }
 
     const MAX_PDF = 700 * 1024;
+    // Any Portal path first goes through the gov.pt login, then lands here.
+    const PORTAL_EMIT_URL = "https://irs.portaldasfinancas.gov.pt/recibos/portal/emitir/emitirDocumentos";
+
+    // Copy, or if the clipboard is blocked (e.g. some iOS modes) select the
+    // shown text so it can be copied by hand.
+    function copyOrSelect(value, btn, selectEl) {
+      const done = () => { btn.textContent = "Copied ✓"; setTimeout(() => { btn.textContent = "Copy"; }, 2000); };
+      const fallback = () => {
+        if (selectEl) {
+          const r = document.createRange(); r.selectNodeContents(selectEl);
+          const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+        }
+        A.toast("Copy blocked — text selected, copy it manually", true);
+      };
+      if (!navigator.clipboard) { fallback(); return; }
+      navigator.clipboard.writeText(value).then(done, fallback);
+    }
 
     function fileToBase64(file) {
       return new Promise((resolve, reject) => {
@@ -1799,10 +1816,31 @@
         .slice().sort((a, b) => a.name.localeCompare(b.name))
         .map((c) => `<option value="${c.id}" ${c.id === custId ? "selected" : ""}>${A.esc(c.name)}</option>`).join("");
 
-      let text = "";
+      let text = "", portalHtml = "", copyValues = [];
       if (custId) {
         const cust = A.state.customers.find((c) => c.id === custId);
         text = KO.generateRecibo(A.state.deliveries, custId, mk, A.state.settings.sizes, A.state.settings.reciboHeader, cust ? cust.nif : "");
+        const total = KO.reciboTotal(A.state.deliveries, custId, mk, A.state.settings.sizes);
+        const nif = cust && cust.nif ? String(cust.nif).trim() : "";
+        const empty = !(total > 0);
+        const amountPt = KO.formatMoney(total).replace(".", ","); // the Portal expects a decimal comma
+        // One row per Portal field; the Copy button copies copyValues[i].value.
+        // selectSel: what to select if the clipboard is blocked (default: the shown value).
+        const field = (label, value, shown, selectSel) => {
+          const i = copyValues.push({ value: value, selectSel: selectSel || `.pf-val[data-pf="${copyValues.length}"]` }) - 1;
+          return `<div class="row" style="align-items:center">` +
+            `<div><span class="muted">${label}</span><br/><span class="pf-val" data-pf="${i}" style="word-break:break-word">${A.esc(shown)}</span></div>` +
+            `<button class="link pf-copy" data-pf="${i}" style="flex:0 0 auto"${empty ? " disabled" : ""}>Copy</button></div>`;
+        };
+        portalHtml = `<div class="card"><h4>Portal das Finanças</h4>` +
+          `<a class="primary" href="${PORTAL_EMIT_URL}" target="_blank" rel="noopener" style="display:inline-block;text-decoration:none;text-align:center">📄 Open Portal (Emitir)</a>` +
+          (empty ? `<p class="muted">Nothing to issue for this month (€0,00).</p>` : "") +
+          (nif ? field("NIF", nif, nif)
+            : `<div class="row"><div><span class="muted">NIF</span><br/>no NIF — consumidor final</div></div>`) +
+          field("Name", cust ? cust.name : "", cust ? cust.name : "") +
+          field("Amount (€)", amountPt, amountPt) +
+          field("Description", text, "the recibo text below", "#rtext") +
+          `</div>`;
       }
 
       container.innerHTML =
@@ -1810,6 +1848,7 @@
         `<label>Customer</label><select id="rcust">${custOpts}</select>` +
         `<label>Month</label><input id="rmonth" type="month" value="${mk}"/>` +
         `</div>` +
+        portalHtml +
         (custId
           ? `<div class="card"><pre id="rtext">${A.esc(text)}</pre>` +
               `<button class="primary" id="copyBtn">Copy to clipboard</button>` +
@@ -1819,6 +1858,10 @@
 
       container.querySelector("#rcust").addEventListener("change", (e) => { A.current.reciboCust = e.target.value; render(); });
       container.querySelector("#rmonth").addEventListener("change", (e) => { A.current.reciboMonth = e.target.value; render(); });
+      container.querySelectorAll(".pf-copy").forEach((b) => b.addEventListener("click", () => {
+        const c = copyValues[Number(b.dataset.pf)];
+        copyOrSelect(c.value, b, container.querySelector(c.selectSel));
+      }));
       const copyBtn = container.querySelector("#copyBtn");
       if (copyBtn) copyBtn.addEventListener("click", async () => {
         try { await navigator.clipboard.writeText(text); container.querySelector("#copyMsg").textContent = "Copied ✓"; }

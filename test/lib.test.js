@@ -894,3 +894,32 @@ test("validateExpense: amount must be at least one cent after rounding", () => {
   assert.strictEqual(r.ok, true);
   assert.strictEqual(r.data.amount, 0.01);
 });
+
+test("reciboTotal equals the Total line of generateRecibo", () => {
+  const ds = [
+    { customerId: "C", date: "2026-06-03",
+      items: [{ sizeId: "1L", flavourId: "a", quantity: 2 }],
+      empties: [{ sizeId: "270ml", quantity: 7 }] },
+    { customerId: "C", date: "2026-06-10",
+      items: [{ sizeId: "1L", flavourId: "a", quantity: 2 },
+              { sizeId: "270ml", flavourId: "b", quantity: 10 }],
+      empties: [] },
+    { customerId: "C", date: "2026-06-24",
+      items: [], empties: [{ sizeId: "270ml", quantity: 3 }] },       // returns only
+    { customerId: "C", date: "2026-07-01",
+      items: [{ sizeId: "1L", flavourId: "a", quantity: 5 }], empties: [] }, // other month
+    { customerId: "OTHER", date: "2026-06-05",
+      items: [{ sizeId: "1L", flavourId: "a", quantity: 99 }], empties: [] },
+  ];
+  const total = KO.reciboTotal(ds, "C", "2026-06", SIZES);
+  assert.strictEqual(total, 67); // 16 + 61 - 7 - 3
+  const text = KO.generateRecibo(ds, "C", "2026-06", SIZES, "H");
+  assert.ok(text.endsWith("Total: " + KO.formatMoney(total) + " Euro"));
+  assert.strictEqual(KO.reciboTotal([], "C", "2026-06", SIZES), 0);
+});
+
+test("reciboTotal rounds to cents", () => {
+  const sizes = [{ id: "x", label: "x", price: 0.1, deposit: 0 }];
+  const ds = [{ customerId: "C", date: "2026-06-01", items: [{ sizeId: "x", flavourId: "a", quantity: 3 }], empties: [] }];
+  assert.strictEqual(KO.reciboTotal(ds, "C", "2026-06", sizes), 0.3);
+});

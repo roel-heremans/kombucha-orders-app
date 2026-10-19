@@ -26,6 +26,8 @@ Firestore, so two people can enter deliveries and see the same stats.
   quantities, optional receipt photos/PDFs, and notes).
 - **Recibo Verde** — pick a customer + month and copy-paste the description text
   (delivery dates, bottle types/amounts, deposit returns, and the netted total).
+  A Portal das Finanças card opens the Portal's issuing page and has one-tap
+  copy for NIF, name, amount (with decimal comma) and description.
 - **Two-account shared data** — you and your wife each log in and see the same
   data, with offline support that syncs when back online.
 - **Restaurant self-ordering** — restaurants can place order requests from their own phone account.

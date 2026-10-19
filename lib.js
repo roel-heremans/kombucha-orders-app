@@ -497,6 +497,21 @@
     return headerLines.concat([""]).concat(body).concat([separator, totalLine]).join("\n");
   }
 
+  // The recibo's "Total:" amount (revenue minus deposit refunds), for pasting
+  // into the Portal's value field. Mirrors generateRecibo; tests tie the two.
+  function reciboTotal(deliveries, customerId, mk, sizes) {
+    let total = 0;
+    deliveries.forEach(function (d) {
+      if (d.customerId !== customerId || !inMonth(d.date, mk)) return;
+      total += deliveryRevenue(d, sizes);
+      sizes.forEach(function (s) {
+        if (s.deposit <= 0) return;
+        (d.empties || []).forEach(function (e) { if (e.sizeId === s.id) total -= e.quantity * s.deposit; });
+      });
+    });
+    return Math.round(total * 100) / 100;
+  }
+
   function orderItemsSummary(order, sizes, flavourName) {
     return (order.items || []).map(function (it) {
       const s = sizeById(sizes, it.sizeId);
@@ -937,5 +952,5 @@
     return out;
   }
 
-  return { formatMoney, sizeById, crc32, zipStore, deliveryRevenue, deliveryDepositRefund, monthKey, inMonth, monthName, dayOfMonth, recentMonthKeys, resolveWindow, monthKeysBetween, inWindow, revenueInWindow, revenueByCustomerInWindow, flavourCountsInWindow, windowLabel, monthlyRevenue, revenueByCustomer, monthlyRevenueSeries, flavourCounts, revenueByCustomerType, outstandingByCustomer, openPayments, reciboSizeLabel, reciboDocId, nextBatchNumber, formatBatchNumber, bottles1LForConversion, sizeLiters, soldLitersInWindow, productionSummary, actionMoment, producedPerSize, deliveredPerSize, latestStocktake, availableToSell, consumptionPeriods, sumConsumption, generateRecibo, orderItemsSummary, orderEmailParams, whatsappOrderText, lastOrderItems, lastDeliveryItems, orderStatusLabel, loginEmail, isRealEmail, customerEmailStatus, validateSignup, customerFromSignup, linkPatch, relinkWrites, parseAmount, validateExpense, expensesInWindow, expensesByCategoryInWindow, profitSeries, scaleToFit, receiptKind, installMode, whatsappSignupText, barChartSVG, stackedBarChartSVG, revenueByTypeInWindow, revenueTypeSeries, revenueTypeByYear, t };
+  return { formatMoney, sizeById, crc32, zipStore, deliveryRevenue, deliveryDepositRefund, monthKey, inMonth, monthName, dayOfMonth, recentMonthKeys, resolveWindow, monthKeysBetween, inWindow, revenueInWindow, revenueByCustomerInWindow, flavourCountsInWindow, windowLabel, monthlyRevenue, revenueByCustomer, monthlyRevenueSeries, flavourCounts, revenueByCustomerType, outstandingByCustomer, openPayments, reciboSizeLabel, reciboDocId, nextBatchNumber, formatBatchNumber, bottles1LForConversion, sizeLiters, soldLitersInWindow, productionSummary, actionMoment, producedPerSize, deliveredPerSize, latestStocktake, availableToSell, consumptionPeriods, sumConsumption, generateRecibo, reciboTotal, orderItemsSummary, orderEmailParams, whatsappOrderText, lastOrderItems, lastDeliveryItems, orderStatusLabel, loginEmail, isRealEmail, customerEmailStatus, validateSignup, customerFromSignup, linkPatch, relinkWrites, parseAmount, validateExpense, expensesInWindow, expensesByCategoryInWindow, profitSeries, scaleToFit, receiptKind, installMode, whatsappSignupText, barChartSVG, stackedBarChartSVG, revenueByTypeInWindow, revenueTypeSeries, revenueTypeByYear, t };
 });

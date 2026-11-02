@@ -923,3 +923,105 @@ test("reciboTotal rounds to cents", () => {
   const ds = [{ customerId: "C", date: "2026-06-01", items: [{ sizeId: "x", flavourId: "a", quantity: 3 }], empties: [] }];
   assert.strictEqual(KO.reciboTotal(ds, "C", "2026-06", sizes), 0.3);
 });
+
+// ── Per-customer-type prices (2026-11) ──
+// Tier prices exclude the deposit; the price stored on a delivery includes it (like the old
+// sizes[].price, e.g. 270 ml 4.50 = 3.50 + 1 deposit).
+
+test("customerPriceType: restaurant, private, subscriber", () => {
+  assert.strictEqual(KO.customerPriceType({ type: "restaurant" }), "restaurant");
+  assert.strictEqual(KO.customerPriceType({}), "restaurant");
+  assert.strictEqual(KO.customerPriceType(null), "restaurant");
+  assert.strictEqual(KO.customerPriceType({ type: "private" }), "private");
+  assert.strictEqual(KO.customerPriceType({ type: "private", subscriber: true }), "subscriber");
+  // only private customers can be subscribers
+  assert.strictEqual(KO.customerPriceType({ type: "restaurant", subscriber: true }), "restaurant");
+});
+
+test("pricesForCustomer uses the default price list (incl. deposit)", () => {
+  const st = { sizes: SIZES };
+  assert.deepStrictEqual(KO.pricesForCustomer(st, { type: "restaurant" }), {
+    "1L": { price: 10, deposit: 2 }, "270ml": { price: 4.5, deposit: 1 } });
+  assert.deepStrictEqual(KO.pricesForCustomer(st, { type: "private" }), {
+    "1L": { price: 11, deposit: 2 }, "270ml": { price: 5.5, deposit: 1 } });
+  assert.deepStrictEqual(KO.pricesForCustomer(st, { type: "private", subscriber: true }), {
+    "1L": { price: 10, deposit: 2 }, "270ml": { price: 5.5, deposit: 1 } });
+});
+
+test("pricesForCustomer honours settings.pricing and falls back to the size for unknown sizes", () => {
+  const st = {
+    sizes: SIZES.concat([{ id: "5L", label: "5 L", price: 30, deposit: 5 }]),
+    pricing: { tiers: { restaurant: { "1L": 7.5 } }, deposits: { "1L": 3 } },
+  };
+  const p = KO.pricesForCustomer(st, { type: "restaurant" });
+  assert.deepStrictEqual(p["1L"], { price: 10.5, deposit: 3 });
+  assert.deepStrictEqual(p["270ml"], { price: 4.5, deposit: 1 });   // default tier
+  assert.deepStrictEqual(p["5L"], { price: 30, deposit: 5 });       // legacy size values
+});
+
+test("deliveryRevenue uses the delivery's own prices when present", () => {
+  const d = { items: [{ sizeId: "1L", quantity: 2 }, { sizeId: "270ml", quantity: 1 }],
+              prices: { "1L": { price: 11, deposit: 2 }, "270ml": { price: 5.5, deposit: 1 } } };
+  assert.strictEqual(KO.deliveryRevenue(d, SIZES), 27.5);
+  // without prices: legacy sizes (unchanged history)
+  assert.strictEqual(KO.deliveryRevenue({ items: d.items }, SIZES), 20.5);
+});
+
+const SUB = { "1L": { price: 10, deposit: 2 }, "270ml": { price: 5.5, deposit: 1 } };
+function week(date, empties) {
+  return { customerId: "S", date, prices: SUB,
+           items: [{ sizeId: "1L", flavourId: "gin", quantity: 4 }],
+           empties: empties ? [{ sizeId: "1L", quantity: empties }] : [] };
+}
+
+test("subscription month: 136 first month, 128 next, 120 when stopping", () => {
+  const nov = [week("2026-11-04"), week("2026-11-11", 4), week("2026-11-18", 4), week("2026-11-25", 4)];
+  assert.strictEqual(KO.reciboTotal(nov, "S", "2026-11", SIZES), 136);
+  const dec = [week("2026-12-02", 4), week("2026-12-09", 4), week("2026-12-16", 4), week("2026-12-23", 4)];
+  assert.strictEqual(KO.reciboTotal(nov.concat(dec), "S", "2026-12", SIZES), 128);
+  // last month: the last 4 empties come back without a new delivery
+  const jan = [week("2027-01-06", 4), week("2027-01-13", 4), week("2027-01-20", 4), week("2027-01-27", 4),
+               { customerId: "S", date: "2027-01-31", prices: SUB, items: [], empties: [{ sizeId: "1L", quantity: 4 }] }];
+  assert.strictEqual(KO.reciboTotal(nov.concat(dec, jan), "S", "2027-01", SIZES), 120);
+  const all = nov.concat(dec, jan);
+  assert.strictEqual(KO.outstandingByCustomer(all, SIZES)[0].depositHeld, 0);
+});
+
+test("old 1 L bottles (no deposit) are not refunded at the new 2 euro deposit", () => {
+  const ds = [
+    // before the change: 6 x 1 L at the old price, no deposit
+    { customerId: "R", date: "2026-10-01", items: [{ sizeId: "1L", flavourId: "g", quantity: 6 }], empties: [] },
+    // after: 4 new 1 L with a 2 euro deposit, 6 empties back
+    { customerId: "R", date: "2026-11-05", prices: { "1L": { price: 10, deposit: 2 } },
+      items: [{ sizeId: "1L", flavourId: "g", quantity: 4 }], empties: [{ sizeId: "1L", quantity: 6 }] },
+    // a week later the 4 new bottles come back
+    { customerId: "R", date: "2026-11-12", prices: { "1L": { price: 10, deposit: 2 } },
+      items: [], empties: [{ sizeId: "1L", quantity: 4 }] },
+  ];
+  // 05 Nov: the 6 empties are the old bottles (the new ones were only just delivered) -> no refund
+  assert.strictEqual(KO.reciboTotal(ds.slice(0, 2), "R", "2026-11", SIZES), 40);
+  // 12 Nov: the 4 new bottles come back -> 4 x 2 refunded
+  assert.strictEqual(KO.reciboTotal(ds, "R", "2026-11", SIZES), 32);
+  assert.strictEqual(KO.outstandingByCustomer(ds, SIZES)[0].depositHeld, 0);
+  const rec = KO.generateRecibo(ds, "R", "2026-11", SIZES, "H");
+  assert.ok(rec.includes("Return November 12: 4x 1L = -8.00"), rec);
+  assert.ok(!rec.includes("Return November 5"), rec);
+  assert.ok(rec.includes("Total: 32.00 Euro"), rec);
+});
+
+test("new 1 L bottles are refunded before old ones", () => {
+  const ds = [
+    { customerId: "R", date: "2026-10-01", items: [{ sizeId: "1L", flavourId: "g", quantity: 3 }], empties: [] },
+    { customerId: "R", date: "2026-11-05", prices: { "1L": { price: 10, deposit: 2 } },
+      items: [{ sizeId: "1L", flavourId: "g", quantity: 4 }], empties: [] },
+    { customerId: "R", date: "2026-11-12", prices: { "1L": { price: 10, deposit: 2 } },
+      items: [], empties: [{ sizeId: "1L", quantity: 5 }] },
+  ];
+  assert.strictEqual(KO.reciboTotal(ds, "R", "2026-11", SIZES), 32);   // 40 - 4 x 2
+  assert.strictEqual(KO.outstandingByCustomer(ds, SIZES)[0].depositHeld, 0);
+});
+
+test("legacy deliveries keep their old refunds even with more empties than delivered", () => {
+  const ds = [{ customerId: "C", date: "2026-06-03", items: [], empties: [{ sizeId: "270ml", quantity: 5 }] }];
+  assert.strictEqual(KO.reciboTotal(ds, "C", "2026-06", SIZES), -5);
+});

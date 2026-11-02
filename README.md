@@ -30,6 +30,10 @@ Firestore, so two people can enter deliveries and see the same stats.
   copy for NIF, name, amount (with decimal comma) and description.
 - **Two-account shared data** — you and your wife each log in and see the same
   data, with offline support that syncs when back online.
+- **Prices per customer type** — restaurant, private and private subscriber prices plus a
+  deposit per size (Settings → Prices per customer type). Each delivery stores the prices it
+  was charged at; deliveries from before 2 Nov 2026 keep the old per-size prices. Empties are
+  refunded at the deposit their bottles were delivered with.
 - **Restaurant self-ordering** — restaurants can place order requests from their own phone account.
 - **Orders tab** — admins see all pending restaurant orders and can fulfill them directly into the delivery form.
 

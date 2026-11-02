@@ -30,6 +30,7 @@
     .row { display:flex; gap:8px; align-items:flex-end; }
     .row > * { flex:1; }
     table { width:100%; border-collapse:collapse; font-size:14px; }
+    .price-grid td, .price-grid th { padding:4px; } .price-grid input { margin:0; }
     th, td { text-align:left; padding:6px; border-bottom:1px solid var(--line); }
     .muted { color:#888; font-size:13px; }
     .hidden { display:none; }
@@ -106,7 +107,7 @@
 
   <!-- Bump ?v= whenever lib.js changes: GitHub Pages lets browsers cache lib.js for 10 min,
        so a new index.html could otherwise run against an old lib.js. -->
-  <script src="lib.js?v=2026-10-19"></script>
+  <script src="lib.js?v=2026-11-02"></script>
   <script type="module">
     import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, sendPasswordResetEmail }
       from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
@@ -655,11 +656,29 @@
         `<input class="emp-qty" data-size="${s.id}" type="number" min="0" value="0"/></div></div>`).join("");
     }
 
+    const PRICE_TYPE_LABEL = { restaurant: "restaurant prices", private: "private prices", subscriber: "subscription prices" };
+
+    // Prices a delivery is charged at: an edited delivery keeps the prices it was saved with
+    // (none = old prices from Settings); a new one gets its customer's current prices.
+    function pricesFor(d) {
+      if (editing) return (A.state.deliveries.find((x) => x.id === editing) || {}).prices;
+      const cust = A.state.customers.find((c) => c.id === d.customerId);
+      return cust ? KO.pricesForCustomer(A.state.settings, cust) : undefined;
+    }
+
     function updateSubtotal() {
       const delivery = readForm();
+      const prices = pricesFor(delivery);
+      if (prices) delivery.prices = prices;
       const total = KO.deliveryRevenue(delivery, A.state.settings ? A.state.settings.sizes : []);
       const el = container.querySelector("#subtotal");
       if (el) el.textContent = KO.formatMoney(total);
+      const pt = container.querySelector("#priceType");
+      if (pt) {
+        const cust = A.state.customers.find((c) => c.id === delivery.customerId);
+        pt.textContent = editing && !prices ? "(old prices)"
+          : cust ? "(" + PRICE_TYPE_LABEL[KO.customerPriceType(cust)] + ", incl. deposit)" : "";
+      }
     }
 
     function readForm() {
@@ -710,7 +729,7 @@
         `<h4>Empties received back</h4>${emptiesRows()}` +
         `<label>Note (optional)</label><textarea id="note" rows="2"></textarea>` +
         `<label style="display:flex;align-items:center;gap:8px;font-weight:normal"><input type="checkbox" id="dpaid" style="width:auto"/> Paid (payment already received)</label>` +
-        `<p><strong>Subtotal: €<span id="subtotal">0.00</span></strong></p>` +
+        `<p><strong>Subtotal: €<span id="subtotal">0.00</span></strong> <span id="priceType" class="muted"></span></p>` +
         `<p id="formErr" class="muted"></p>` +
         `<button class="primary" id="save">${editing ? "Update" : "Save"} delivery</button>` +
         ((editing || fulfilling) ? `<button class="link" id="cancelEdit">${editing ? "Cancel edit" : "Cancel fulfilment"}</button>` : "") +
@@ -729,8 +748,8 @@
           itemsDiv.innerHTML = "";
           if (items.length) items.forEach((it) => itemsDiv.appendChild(itemRow(it)));
           else itemsDiv.appendChild(itemRow());
-          updateSubtotal();
         }
+        updateSubtotal();
       });
       container.querySelector("#addItem").addEventListener("click", (e) => { e.preventDefault(); itemsDiv.appendChild(itemRow()); });
       container.querySelector("#save").addEventListener("click", onSave);
@@ -756,6 +775,8 @@
         if (editing) { await A.updateDelivery(editing, d); editing = null; }
         else {
           d.enteredBy = A.user ? A.user.email : "";
+          const prices = pricesFor(d);
+          if (prices) d.prices = prices;
           const ref = await A.addDelivery(d);
           const orderId = fulfilling;
           fulfilling = null;
@@ -2007,6 +2028,8 @@
         `<option value="private" ${c.type==="private"?"selected":""}>Private</option>` +
       `</select></div>` +
       `<div><label>NIF</label><input class="c-nif" value="${A.esc(c.nif||"")}"/></div></div>` +
+      `<label style="display:flex;align-items:center;gap:8px;font-weight:normal"><input type="checkbox" class="c-subscriber" style="width:auto" ${c.subscriber ? "checked" : ""}/>` +
+        `Subscriber (private only: subscription prices)</label>` +
       `<label>Notes</label><input class="c-notes" value="${A.esc(c.notes||"")}"/>` +
       (status === "none"
         ? `<p class="muted">No login yet — send them the Invite QR, or use Manual login below.</p>`
@@ -2091,7 +2114,23 @@
         pendingSignupsHtml() +
         `<div class="card"><h4>Account</h4><p class="muted">${A.user ? A.user.email : ""}</p>` +
           `<button class="link" id="logoutBtn">Log out</button></div>` +
-        `<div class="card"><details><summary>Bottle sizes &amp; prices</summary>` +
+        `<div class="card"><details><summary>Prices per customer type</summary>` +
+          `<p class="muted">Price per bottle without deposit. New deliveries are charged price + deposit; ` +
+          `a private customer ticked "Subscriber" pays the subscription price. Deliveries already saved keep their prices.</p>` +
+          (() => {
+            const pt = KO.pricingTable(st);
+            const head = `<tr><th></th>` + st.sizes.map((s) => `<th>${A.esc(s.label)}</th>`).join("") + `</tr>`;
+            const tierRow = (t, label) => `<tr><td>${label}</td>` + st.sizes.map((s) =>
+              `<td><input class="p-tier" data-tier="${t}" data-size="${s.id}" type="number" step="0.5" min="0" value="${pt.tiers[t][s.id] != null ? pt.tiers[t][s.id] : ""}"/></td>`).join("") + `</tr>`;
+            const depRow = `<tr><td>Deposit</td>` + st.sizes.map((s) =>
+              `<td><input class="p-dep" data-size="${s.id}" type="number" step="0.5" min="0" value="${pt.deposits[s.id] != null ? pt.deposits[s.id] : ""}"/></td>`).join("") + `</tr>`;
+            return `<table class="price-grid">${head}${tierRow("restaurant", "Restaurant")}${tierRow("private", "Private")}` +
+              `${tierRow("subscriber", "Subscriber")}${depRow}</table>`;
+          })() +
+          `<button class="primary" id="savePricing">Save prices</button>` +
+          `<p id="pricingMsg" class="muted"></p></details></div>` +
+        `<div class="card"><details><summary>Bottle sizes &amp; old prices</summary>` +
+          `<p class="muted">Price (incl. deposit) and deposit used for deliveries saved before per-type prices (2 Nov 2026). Change only to correct old records.</p>` +
           st.sizes.map((s, i) =>
             `<div class="row" data-idx="${i}">` +
             `<div><label>Label</label><input class="s-label" value="${A.esc(s.label)}"/></div>` +
@@ -2169,8 +2208,20 @@
           price: parseFloat(row.querySelector(".s-price").value) || 0,
           deposit: parseFloat(row.querySelector(".s-dep").value) || 0,
         }));
-        await A.saveSettings({ sizes, reciboHeader: container.querySelector("#recHeader").value.trim() });
+        await A.saveSettings(Object.assign({}, st, { sizes, reciboHeader: container.querySelector("#recHeader").value.trim() }));
         container.querySelector("#setMsg").textContent = "Saved ✓";
+      });
+
+      container.querySelector("#savePricing").addEventListener("click", async () => {
+        const num = (el) => { const v = parseFloat(el.value); return isNaN(v) ? null : v; };
+        const tiers = {}, deposits = {};
+        container.querySelectorAll(".p-tier").forEach((el) => {
+          const v = num(el); if (v == null) return;
+          (tiers[el.dataset.tier] || (tiers[el.dataset.tier] = {}))[el.dataset.size] = v;
+        });
+        container.querySelectorAll(".p-dep").forEach((el) => { const v = num(el); if (v != null) deposits[el.dataset.size] = v; });
+        await A.saveSettings(Object.assign({}, st, { pricing: { tiers, deposits } }));
+        container.querySelector("#pricingMsg").textContent = "Saved ✓";
       });
 
       const setCustSel = container.querySelector("#setCust");
@@ -2188,6 +2239,7 @@
               contact: card.querySelector(".c-contact").value.trim(),
               phone: card.querySelector(".c-phone").value.trim(),
               type: card.querySelector(".c-type").value,
+              subscriber: card.querySelector(".c-type").value === "private" && card.querySelector(".c-subscriber").checked,
               nif: card.querySelector(".c-nif").value.trim(),
               notes: card.querySelector(".c-notes").value.trim(),
             });

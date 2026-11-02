@@ -13,18 +13,128 @@
     return sizes.find(function (s) { return s.id === sizeId; });
   }
 
+  // ── Prices ──
+  // Since 2026-11 prices depend on the customer type. Tier prices EXCLUDE the deposit; a
+  // delivery stores what it was charged per size in `delivery.prices` as
+  // { sizeId: { price (incl. deposit), deposit } }. Deliveries saved before that have no
+  // `prices` and keep using settings.sizes[].price / .deposit (price incl. deposit), so past
+  // revenue and recibos never change when prices change.
+  const DEFAULT_PRICING = {
+    tiers: {
+      restaurant: { "1L": 8, "270ml": 3.5 },
+      private: { "1L": 9, "270ml": 4.5 },
+      subscriber: { "1L": 8, "270ml": 4.5 },
+    },
+    deposits: { "1L": 2, "270ml": 1 },
+  };
+  const PRICE_TYPES = ["restaurant", "private", "subscriber"];
+
+  function customerPriceType(customer) {
+    if (!customer || customer.type !== "private") return "restaurant";
+    return customer.subscriber ? "subscriber" : "private";
+  }
+
+  // Effective price list: settings.pricing over DEFAULT_PRICING, per size.
+  function pricingTable(settings) {
+    const own = (settings && settings.pricing) || {};
+    const tiers = {};
+    PRICE_TYPES.forEach(function (t) {
+      tiers[t] = Object.assign({}, DEFAULT_PRICING.tiers[t], (own.tiers || {})[t] || {});
+    });
+    return { tiers: tiers, deposits: Object.assign({}, DEFAULT_PRICING.deposits, own.deposits || {}) };
+  }
+
+  // { sizeId: { price (incl. deposit), deposit } } for a new delivery to `customer`.
+  function pricesForCustomer(settings, customer) {
+    const table = pricingTable(settings);
+    const tier = table.tiers[customerPriceType(customer)];
+    const out = {};
+    ((settings && settings.sizes) || []).forEach(function (s) {
+      const base = tier[s.id];
+      const dep = table.deposits[s.id];
+      if (typeof base === "number" && typeof dep === "number") {
+        out[s.id] = { price: Math.round((base + dep) * 100) / 100, deposit: dep };
+      } else {
+        out[s.id] = { price: s.price, deposit: s.deposit };
+      }
+    });
+    return out;
+  }
+
+  function unitPrice(delivery, sizeId, sizes) {
+    const p = delivery.prices && delivery.prices[sizeId];
+    if (p) return p.price;
+    const s = sizeById(sizes, sizeId);
+    return s ? s.price : 0;
+  }
+
+  // Deposit charged per bottle of `sizeId` delivered in `delivery`.
+  function unitDeposit(delivery, sizeId, sizes) {
+    const p = delivery.prices && delivery.prices[sizeId];
+    if (p) return p.deposit || 0;
+    const s = sizeById(sizes, sizeId);
+    return s ? s.deposit || 0 : 0;
+  }
+
   function deliveryRevenue(delivery, sizes) {
     return (delivery.items || []).reduce(function (sum, it) {
-      const s = sizeById(sizes, it.sizeId);
-      return sum + (s ? s.price * it.quantity : 0);
+      return sum + unitPrice(delivery, it.sizeId, sizes) * it.quantity;
     }, 0);
   }
 
   function deliveryDepositRefund(delivery, sizes) {
     return (delivery.empties || []).reduce(function (sum, e) {
-      const s = sizeById(sizes, e.sizeId);
-      return sum + (s ? s.deposit * e.quantity : 0);
+      return sum + unitDeposit(delivery, e.sizeId, sizes) * e.quantity;
     }, 0);
+  }
+
+  // Deposit refunds for one customer's empties, walking their deliveries in date order.
+  // Each bottle out carries the deposit it was delivered with. Empties on a delivery are
+  // earlier bottles coming back, so they are matched before that delivery's own items, and
+  // the highest deposit comes back first (new 1 L bottles at 2 before old ones at 0).
+  // Deliveries without `prices` (saved before per-type prices) refund exactly as before:
+  // empties x size deposit. Empties with no bottle left to match refund the size deposit.
+  // Returns { refunds: Map(delivery -> { sizeId: { qty, amount } }), held }.
+  function depositLedger(deliveries, customerId, sizes) {
+    const mine = (deliveries || []).filter(function (d) { return d && d.customerId === customerId; })
+      .slice().sort(function (a, b) {
+        const ka = (a.date || "") + " " + (a.time || ""), kb = (b.date || "") + " " + (b.time || "");
+        return ka < kb ? -1 : ka > kb ? 1 : 0;
+      });
+    const pool = {};   // sizeId -> { deposit: count }
+    const refunds = new Map();
+    let charged = 0, refunded = 0;
+    mine.forEach(function (d) {
+      const per = {};
+      (d.empties || []).forEach(function (e) {
+        const s = sizeById(sizes, e.sizeId);
+        const legacyDep = s ? s.deposit || 0 : 0;
+        const bag = pool[e.sizeId] || (pool[e.sizeId] = {});
+        const deps = Object.keys(bag).map(Number).sort(function (x, y) { return y - x; });
+        let left = e.quantity, amount = 0, qty = 0;
+        deps.forEach(function (dep) {
+          const take = Math.min(left, bag[dep]);
+          if (take <= 0) return;
+          bag[dep] -= take; left -= take;
+          if (dep > 0) { amount += take * dep; qty += take; }
+        });
+        if (!d.prices) { amount = e.quantity * legacyDep; qty = legacyDep > 0 ? e.quantity : 0; }
+        else if (left > 0 && legacyDep > 0) { amount += left * legacyDep; qty += left; }
+        if (qty > 0 || amount !== 0) {
+          const r = per[e.sizeId] || (per[e.sizeId] = { qty: 0, amount: 0 });
+          r.qty += qty; r.amount += amount;
+        }
+        refunded += amount;
+      });
+      (d.items || []).forEach(function (it) {
+        const dep = unitDeposit(d, it.sizeId, sizes);
+        const bag = pool[it.sizeId] || (pool[it.sizeId] = {});
+        bag[dep] = (bag[dep] || 0) + it.quantity;
+        charged += dep * it.quantity;
+      });
+      refunds.set(d, per);
+    });
+    return { refunds: refunds, held: Math.round((charged - refunded) * 100) / 100 };
   }
 
   function openPayments(deliveries, sizes) {
@@ -283,15 +393,12 @@
     return Object.keys(byCust).sort().map(function (cid) {
       const perRaw = byCust[cid];
       const perSize = {};
-      let depositHeld = 0;
       Object.keys(perRaw).forEach(function (sid) {
         const net = perRaw[sid];
         if (net === 0) return;
         perSize[sid] = net;
-        const s = sizeById(sizes, sid);
-        if (s) depositHeld += net * s.deposit;
       });
-      return { customerId: cid, perSize: perSize, depositHeld: depositHeld };
+      return { customerId: cid, perSize: perSize, depositHeld: depositLedger(deliveries, cid, sizes).held };
     });
   }
 
@@ -469,15 +576,15 @@
     });
 
     const returnLines = [];
+    const ledger = depositLedger(deliveries, customerId, sizes);
     mine.forEach(function (d) {
       const parts = [];
       let refund = 0;
+      const per = ledger.refunds.get(d) || {};
       sizes.forEach(function (s) {
-        if (s.deposit <= 0) return;
-        const qty = (d.empties || []).reduce(function (sum, e) {
-          return e.sizeId === s.id ? sum + e.quantity : sum;
-        }, 0);
-        if (qty > 0) { parts.push(qty + "x " + reciboSizeLabel(s)); refund += qty * s.deposit; }
+        const r = per[s.id];
+        if (!r || r.qty <= 0) return;
+        parts.push(r.qty + "x " + reciboSizeLabel(s)); refund += r.amount;
       });
       if (parts.length === 0) return;
       total -= refund;
@@ -501,13 +608,12 @@
   // into the Portal's value field. Mirrors generateRecibo; tests tie the two.
   function reciboTotal(deliveries, customerId, mk, sizes) {
     let total = 0;
+    const ledger = depositLedger(deliveries, customerId, sizes);
     deliveries.forEach(function (d) {
       if (d.customerId !== customerId || !inMonth(d.date, mk)) return;
       total += deliveryRevenue(d, sizes);
-      sizes.forEach(function (s) {
-        if (s.deposit <= 0) return;
-        (d.empties || []).forEach(function (e) { if (e.sizeId === s.id) total -= e.quantity * s.deposit; });
-      });
+      const per = ledger.refunds.get(d) || {};
+      sizes.forEach(function (s) { if (per[s.id] && per[s.id].qty > 0) total -= per[s.id].amount; });
     });
     return Math.round(total * 100) / 100;
   }
@@ -952,5 +1058,5 @@
     return out;
   }
 
-  return { formatMoney, sizeById, crc32, zipStore, deliveryRevenue, deliveryDepositRefund, monthKey, inMonth, monthName, dayOfMonth, recentMonthKeys, resolveWindow, monthKeysBetween, inWindow, revenueInWindow, revenueByCustomerInWindow, flavourCountsInWindow, windowLabel, monthlyRevenue, revenueByCustomer, monthlyRevenueSeries, flavourCounts, revenueByCustomerType, outstandingByCustomer, openPayments, reciboSizeLabel, reciboDocId, nextBatchNumber, formatBatchNumber, bottles1LForConversion, sizeLiters, soldLitersInWindow, productionSummary, actionMoment, producedPerSize, deliveredPerSize, latestStocktake, availableToSell, consumptionPeriods, sumConsumption, generateRecibo, reciboTotal, orderItemsSummary, orderEmailParams, whatsappOrderText, lastOrderItems, lastDeliveryItems, orderStatusLabel, loginEmail, isRealEmail, customerEmailStatus, validateSignup, customerFromSignup, linkPatch, relinkWrites, parseAmount, validateExpense, expensesInWindow, expensesByCategoryInWindow, profitSeries, scaleToFit, receiptKind, installMode, whatsappSignupText, barChartSVG, stackedBarChartSVG, revenueByTypeInWindow, revenueTypeSeries, revenueTypeByYear, t };
+  return { formatMoney, sizeById, DEFAULT_PRICING, PRICE_TYPES, customerPriceType, pricingTable, pricesForCustomer, unitPrice, unitDeposit, depositLedger, crc32, zipStore, deliveryRevenue, deliveryDepositRefund, monthKey, inMonth, monthName, dayOfMonth, recentMonthKeys, resolveWindow, monthKeysBetween, inWindow, revenueInWindow, revenueByCustomerInWindow, flavourCountsInWindow, windowLabel, monthlyRevenue, revenueByCustomer, monthlyRevenueSeries, flavourCounts, revenueByCustomerType, outstandingByCustomer, openPayments, reciboSizeLabel, reciboDocId, nextBatchNumber, formatBatchNumber, bottles1LForConversion, sizeLiters, soldLitersInWindow, productionSummary, actionMoment, producedPerSize, deliveredPerSize, latestStocktake, availableToSell, consumptionPeriods, sumConsumption, generateRecibo, reciboTotal, orderItemsSummary, orderEmailParams, whatsappOrderText, lastOrderItems, lastDeliveryItems, orderStatusLabel, loginEmail, isRealEmail, customerEmailStatus, validateSignup, customerFromSignup, linkPatch, relinkWrites, parseAmount, validateExpense, expensesInWindow, expensesByCategoryInWindow, profitSeries, scaleToFit, receiptKind, installMode, whatsappSignupText, barChartSVG, stackedBarChartSVG, revenueByTypeInWindow, revenueTypeSeries, revenueTypeByYear, t };
 });

@@ -137,13 +137,38 @@
     return { refunds: refunds, held: Math.round((charged - refunded) * 100) / 100 };
   }
 
+  // Deposit refunded on `delivery`'s empties ({ total, perSize: { sizeId: { qty, amount } } }).
+  // `deliveries` is the full list (it must include `delivery`): what an empty refunds depends
+  // on the customer's earlier bottles (see depositLedger).
+  function deliveryRefund(deliveries, delivery, sizes) {
+    const per = depositLedger(deliveries, delivery.customerId, sizes).refunds.get(delivery) || {};
+    const perSize = {};
+    let total = 0;
+    Object.keys(per).forEach(function (sid) {
+      if (per[sid].qty <= 0) return;
+      perSize[sid] = { qty: per[sid].qty, amount: per[sid].amount };
+      total += per[sid].amount;
+    });
+    return { total: Math.round(total * 100) / 100, perSize: perSize };
+  }
+
+  // What the customer pays for one delivery: bottles minus the deposit on the empties.
+  function deliveryAmountDue(deliveries, delivery, sizes) {
+    return Math.round((deliveryRevenue(delivery, sizes) - deliveryRefund(deliveries, delivery, sizes).total) * 100) / 100;
+  }
+
   function openPayments(deliveries, sizes) {
     const byCust = {};
     let grandTotal = 0;
+    const ledgers = {};
     (deliveries || []).forEach(function (d) {
       if (d.paid) return;
-      const amount = deliveryRevenue(d, sizes);
-      if (amount <= 0) return;
+      const led = ledgers[d.customerId] || (ledgers[d.customerId] = depositLedger(deliveries, d.customerId, sizes));
+      const per = led.refunds.get(d) || {};
+      let refund = 0;
+      Object.keys(per).forEach(function (sid) { if (per[sid].qty > 0) refund += per[sid].amount; });
+      const amount = Math.round((deliveryRevenue(d, sizes) - refund) * 100) / 100;
+      if (amount === 0) return;
       grandTotal += amount;
       const cust = byCust[d.customerId] || (byCust[d.customerId] = { customerId: d.customerId, total: 0, monthsMap: {} });
       cust.total += amount;
@@ -1058,5 +1083,5 @@
     return out;
   }
 
-  return { formatMoney, sizeById, DEFAULT_PRICING, PRICE_TYPES, customerPriceType, pricingTable, pricesForCustomer, unitPrice, unitDeposit, depositLedger, crc32, zipStore, deliveryRevenue, deliveryDepositRefund, monthKey, inMonth, monthName, dayOfMonth, recentMonthKeys, resolveWindow, monthKeysBetween, inWindow, revenueInWindow, revenueByCustomerInWindow, flavourCountsInWindow, windowLabel, monthlyRevenue, revenueByCustomer, monthlyRevenueSeries, flavourCounts, revenueByCustomerType, outstandingByCustomer, openPayments, reciboSizeLabel, reciboDocId, nextBatchNumber, formatBatchNumber, bottles1LForConversion, sizeLiters, soldLitersInWindow, productionSummary, actionMoment, producedPerSize, deliveredPerSize, latestStocktake, availableToSell, consumptionPeriods, sumConsumption, generateRecibo, reciboTotal, orderItemsSummary, orderEmailParams, whatsappOrderText, lastOrderItems, lastDeliveryItems, orderStatusLabel, loginEmail, isRealEmail, customerEmailStatus, validateSignup, customerFromSignup, linkPatch, relinkWrites, parseAmount, validateExpense, expensesInWindow, expensesByCategoryInWindow, profitSeries, scaleToFit, receiptKind, installMode, whatsappSignupText, barChartSVG, stackedBarChartSVG, revenueByTypeInWindow, revenueTypeSeries, revenueTypeByYear, t };
+  return { formatMoney, sizeById, deliveryRefund, deliveryAmountDue, DEFAULT_PRICING, PRICE_TYPES, customerPriceType, pricingTable, pricesForCustomer, unitPrice, unitDeposit, depositLedger, crc32, zipStore, deliveryRevenue, deliveryDepositRefund, monthKey, inMonth, monthName, dayOfMonth, recentMonthKeys, resolveWindow, monthKeysBetween, inWindow, revenueInWindow, revenueByCustomerInWindow, flavourCountsInWindow, windowLabel, monthlyRevenue, revenueByCustomer, monthlyRevenueSeries, flavourCounts, revenueByCustomerType, outstandingByCustomer, openPayments, reciboSizeLabel, reciboDocId, nextBatchNumber, formatBatchNumber, bottles1LForConversion, sizeLiters, soldLitersInWindow, productionSummary, actionMoment, producedPerSize, deliveredPerSize, latestStocktake, availableToSell, consumptionPeriods, sumConsumption, generateRecibo, reciboTotal, orderItemsSummary, orderEmailParams, whatsappOrderText, lastOrderItems, lastDeliveryItems, orderStatusLabel, loginEmail, isRealEmail, customerEmailStatus, validateSignup, customerFromSignup, linkPatch, relinkWrites, parseAmount, validateExpense, expensesInWindow, expensesByCategoryInWindow, profitSeries, scaleToFit, receiptKind, installMode, whatsappSignupText, barChartSVG, stackedBarChartSVG, revenueByTypeInWindow, revenueTypeSeries, revenueTypeByYear, t };
 });

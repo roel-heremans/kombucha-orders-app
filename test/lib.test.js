@@ -1025,3 +1025,30 @@ test("legacy deliveries keep their old refunds even with more empties than deliv
   const ds = [{ customerId: "C", date: "2026-06-03", items: [], empties: [{ sizeId: "270ml", quantity: 5 }] }];
   assert.strictEqual(KO.reciboTotal(ds, "C", "2026-06", SIZES), -5);
 });
+
+// ── Empties deducted where money is shown (2026-11) ──
+
+test("deliveryRefund: the 2 euro deposit comes off when new 1 L empties come back", () => {
+  const SUBP = { "1L": { price: 10, deposit: 2 }, "270ml": { price: 4.5, deposit: 1 } };
+  const w1 = { customerId: "R", date: "2026-11-04", prices: SUBP, items: [{ sizeId: "1L", quantity: 4 }], empties: [] };
+  const w2 = { customerId: "R", date: "2026-11-11", prices: SUBP, items: [{ sizeId: "1L", quantity: 4 }],
+               empties: [{ sizeId: "1L", quantity: 4 }] };
+  const all = [w1, w2];
+  assert.deepStrictEqual(KO.deliveryRefund(all, w2, SIZES), { total: 8, perSize: { "1L": { qty: 4, amount: 8 } } });
+  assert.deepStrictEqual(KO.deliveryRefund(all, w1, SIZES), { total: 0, perSize: {} });
+  assert.strictEqual(KO.deliveryAmountDue(all, w2, SIZES), 32);
+});
+
+test("openPayments deducts returned empties, like the recibo", () => {
+  const SUBP = { "1L": { price: 10, deposit: 2 } };
+  const ds = [
+    { id: "a", customerId: "R", date: "2026-11-04", prices: SUBP, items: [{ sizeId: "1L", quantity: 4 }], empties: [] },
+    { id: "b", customerId: "R", date: "2026-11-11", prices: SUBP, items: [{ sizeId: "1L", quantity: 4 }],
+      empties: [{ sizeId: "1L", quantity: 4 }] },
+  ];
+  const r = KO.openPayments(ds, SIZES);
+  assert.strictEqual(r.grandTotal, 72);
+  assert.strictEqual(r.customers[0].total, KO.reciboTotal(ds, "R", "2026-11", SIZES));
+  const items = r.customers[0].months[0].items;
+  assert.deepStrictEqual(items.map((i) => [i.id, i.amount]), [["b", 32], ["a", 40]]);
+});

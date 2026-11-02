@@ -107,7 +107,7 @@
 
   <!-- Bump ?v= whenever lib.js changes: GitHub Pages lets browsers cache lib.js for 10 min,
        so a new index.html could otherwise run against an old lib.js. -->
-  <script src="lib.js?v=2026-11-02"></script>
+  <script src="lib.js?v=2026-11-02b"></script>
   <script type="module">
     import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, sendPasswordResetEmail }
       from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
@@ -670,9 +670,22 @@
       const delivery = readForm();
       const prices = pricesFor(delivery);
       if (prices) delivery.prices = prices;
-      const total = KO.deliveryRevenue(delivery, A.state.settings ? A.state.settings.sizes : []);
+      const sizes = A.state.settings ? A.state.settings.sizes : [];
+      const total = KO.deliveryRevenue(delivery, sizes);
+      // Deposit back on the empties: worked out against this customer's earlier bottles,
+      // with this form standing in for the delivery being edited.
+      const others = A.state.deliveries.filter((x) => x.id !== editing);
+      const refund = delivery.customerId ? KO.deliveryRefund(others.concat([delivery]), delivery, sizes) : { total: 0, perSize: {} };
       const el = container.querySelector("#subtotal");
-      if (el) el.textContent = KO.formatMoney(total);
+      if (el) el.textContent = KO.formatMoney(total - refund.total);
+      const br = container.querySelector("#refundLine");
+      if (br) {
+        const back = delivery.empties.reduce((n, e) => n + e.quantity, 0);
+        const paidBack = Object.keys(refund.perSize).reduce((n, sid) => n + refund.perSize[sid].qty, 0);
+        br.textContent = back === 0 ? ""
+          : `Bottles €${KO.formatMoney(total)} − deposit back €${KO.formatMoney(refund.total)}` +
+            (paidBack < back ? ` (${back - paidBack} empt${back - paidBack === 1 ? "y was an old bottle" : "ies were old bottles"} without deposit)` : "");
+      }
       const pt = container.querySelector("#priceType");
       if (pt) {
         const cust = A.state.customers.find((c) => c.id === delivery.customerId);
@@ -729,7 +742,7 @@
         `<h4>Empties received back</h4>${emptiesRows()}` +
         `<label>Note (optional)</label><textarea id="note" rows="2"></textarea>` +
         `<label style="display:flex;align-items:center;gap:8px;font-weight:normal"><input type="checkbox" id="dpaid" style="width:auto"/> Paid (payment already received)</label>` +
-        `<p><strong>Subtotal: €<span id="subtotal">0.00</span></strong> <span id="priceType" class="muted"></span></p>` +
+        `<p><strong>To pay: €<span id="subtotal">0.00</span></strong> <span id="priceType" class="muted"></span><br/><span id="refundLine" class="muted"></span></p>` +
         `<p id="formErr" class="muted"></p>` +
         `<button class="primary" id="save">${editing ? "Update" : "Save"} delivery</button>` +
         ((editing || fulfilling) ? `<button class="link" id="cancelEdit">${editing ? "Cancel edit" : "Cancel fulfilment"}</button>` : "") +
@@ -752,6 +765,7 @@
         updateSubtotal();
       });
       container.querySelector("#addItem").addEventListener("click", (e) => { e.preventDefault(); itemsDiv.appendChild(itemRow()); });
+      container.querySelectorAll(".emp-qty").forEach((i) => i.addEventListener("input", updateSubtotal));
       container.querySelector("#save").addEventListener("click", onSave);
       if (editing || fulfilling) container.querySelector("#cancelEdit").addEventListener("click", (e) => { e.preventDefault(); editing = null; fulfilling = null; built = false; renderNew(); });
       built = true;
@@ -873,6 +887,10 @@
         `<span class="muted">${itemSummary(d, sizes)}</span><br/>` +
         `Revenue: €${KO.formatMoney(KO.deliveryRevenue(d, sizes))}` +
         ((d.empties || []).length ? ` · Empties back: ${emptiesSummary(d, sizes)}` : "") +
+        (() => {
+          const refund = KO.deliveryRefund(A.state.deliveries, d, sizes).total;
+          return refund ? ` · Deposit back: −€${KO.formatMoney(refund)} · <strong>To pay: €${KO.formatMoney(KO.deliveryRevenue(d, sizes) - refund)}</strong>` : "";
+        })() +
         `<div style="margin-top:8px">` +
         (hasRevenue ? `<button class="link" data-togglepaid="${d.id}">${d.paid ? "Mark unpaid" : "Mark paid"}</button> · ` : "") +
         `<button class="link" data-edit="${d.id}">Edit</button> · ` +

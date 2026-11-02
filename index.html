@@ -2031,6 +2031,10 @@
       `<label style="display:flex;align-items:center;gap:8px;font-weight:normal"><input type="checkbox" class="c-subscriber" style="width:auto" ${c.subscriber ? "checked" : ""}/>` +
         `Subscriber (private only: subscription prices)</label>` +
       `<label>Notes</label><input class="c-notes" value="${A.esc(c.notes||"")}"/>` +
+      `<label style="display:flex;align-items:center;gap:8px;font-weight:normal"><input type="checkbox" class="c-reviewed" style="width:auto" ${c.reviewed ? "checked" : ""}/>` +
+        `⭐ Left a review${c.reviewedAt ? ` <span class="muted">(${A.esc(c.reviewedAt)})</span>` : ""}</label>` +
+      `<label style="display:flex;align-items:center;gap:8px;font-weight:normal"><input type="checkbox" class="c-freebottle" style="width:auto" ${c.freeBottleGiven ? "checked" : ""}/>` +
+        `🍾 Free bottle given${c.freeBottleAt ? ` <span class="muted">(${A.esc(c.freeBottleAt)})</span>` : ""}</label>` +
       (status === "none"
         ? `<p class="muted">No login yet — send them the Invite QR, or use Manual login below.</p>`
         : "") +
@@ -2146,7 +2150,8 @@
             `<option value="">— choose customer —</option>` +
             sortedCustomers.map((c) => {
               const cs = KO.customerEmailStatus(c, A.loginNameDomain);
-              const suffix = cs === "real" ? " ✉" : cs === "synthetic" ? " — name login" : " — no login";
+              const suffix = (cs === "real" ? " ✉" : cs === "synthetic" ? " — name login" : " — no login") +
+                (c.reviewed ? " ⭐" : "") + (c.freeBottleGiven ? " 🍾" : "");
               return `<option value="${c.id}" ${selCust && c.id === selCust.id ? "selected" : ""}>${A.esc(c.name)}${suffix}</option>`;
             }).join("") +
           `</select>` +
@@ -2233,8 +2238,14 @@
       container.querySelectorAll(".cust-edit").forEach((card) => {
         card.querySelector(".c-save").addEventListener("click", async () => {
           const save = card.querySelector(".c-save");
+          const cur = A.state.customers.find((x) => x.id === card.dataset.cid) || {};
+          const today = new Date().toISOString().slice(0, 10);
+          const reviewed = card.querySelector(".c-reviewed").checked;
+          const freeBottleGiven = card.querySelector(".c-freebottle").checked;
           try {
             await A.updateCustomer(card.dataset.cid, {
+              reviewed, reviewedAt: reviewed ? (cur.reviewedAt || today) : "",
+              freeBottleGiven, freeBottleAt: freeBottleGiven ? (cur.freeBottleAt || today) : "",
               name: card.querySelector(".c-name").value.trim(),
               contact: card.querySelector(".c-contact").value.trim(),
               phone: card.querySelector(".c-phone").value.trim(),

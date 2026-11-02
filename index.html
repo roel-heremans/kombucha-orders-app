@@ -107,7 +107,7 @@
 
   <!-- Bump ?v= whenever lib.js changes: GitHub Pages lets browsers cache lib.js for 10 min,
        so a new index.html could otherwise run against an old lib.js. -->
-  <script src="lib.js?v=2026-11-02b"></script>
+  <script src="lib.js?v=2026-11-02c"></script>
   <script type="module">
     import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, sendPasswordResetEmail }
       from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
@@ -672,19 +672,16 @@
       if (prices) delivery.prices = prices;
       const sizes = A.state.settings ? A.state.settings.sizes : [];
       const total = KO.deliveryRevenue(delivery, sizes);
-      // Deposit back on the empties: worked out against this customer's earlier bottles,
-      // with this form standing in for the delivery being edited.
+      // Deposit back on the empties, at this delivery's deposit (the form stands in for the
+      // delivery being edited).
       const others = A.state.deliveries.filter((x) => x.id !== editing);
       const refund = delivery.customerId ? KO.deliveryRefund(others.concat([delivery]), delivery, sizes) : { total: 0, perSize: {} };
       const el = container.querySelector("#subtotal");
       if (el) el.textContent = KO.formatMoney(total - refund.total);
       const br = container.querySelector("#refundLine");
       if (br) {
-        const back = delivery.empties.reduce((n, e) => n + e.quantity, 0);
-        const paidBack = Object.keys(refund.perSize).reduce((n, sid) => n + refund.perSize[sid].qty, 0);
-        br.textContent = back === 0 ? ""
-          : `Bottles €${KO.formatMoney(total)} − deposit back €${KO.formatMoney(refund.total)}` +
-            (paidBack < back ? ` (${back - paidBack} empt${back - paidBack === 1 ? "y was an old bottle" : "ies were old bottles"} without deposit)` : "");
+        br.textContent = refund.total === 0 ? ""
+          : `Bottles €${KO.formatMoney(total)} − deposit back €${KO.formatMoney(refund.total)}`;
       }
       const pt = container.querySelector("#priceType");
       if (pt) {

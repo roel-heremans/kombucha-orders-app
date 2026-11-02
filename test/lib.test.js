@@ -987,38 +987,31 @@ test("subscription month: 136 first month, 128 next, 120 when stopping", () => {
   assert.strictEqual(KO.outstandingByCustomer(all, SIZES)[0].depositHeld, 0);
 });
 
-test("old 1 L bottles (no deposit) are not refunded at the new 2 euro deposit", () => {
+test("every 1 L empty returned from now on refunds 2 euro, old bottles included", () => {
   const ds = [
     // before the change: 6 x 1 L at the old price, no deposit
     { customerId: "R", date: "2026-10-01", items: [{ sizeId: "1L", flavourId: "g", quantity: 6 }], empties: [] },
-    // after: 4 new 1 L with a 2 euro deposit, 6 empties back
+    // after: 4 new 1 L with a 2 euro deposit, the 6 old bottles come back
     { customerId: "R", date: "2026-11-05", prices: { "1L": { price: 10, deposit: 2 } },
       items: [{ sizeId: "1L", flavourId: "g", quantity: 4 }], empties: [{ sizeId: "1L", quantity: 6 }] },
     // a week later the 4 new bottles come back
     { customerId: "R", date: "2026-11-12", prices: { "1L": { price: 10, deposit: 2 } },
       items: [], empties: [{ sizeId: "1L", quantity: 4 }] },
   ];
-  // 05 Nov: the 6 empties are the old bottles (the new ones were only just delivered) -> no refund
-  assert.strictEqual(KO.reciboTotal(ds.slice(0, 2), "R", "2026-11", SIZES), 40);
-  // 12 Nov: the 4 new bottles come back -> 4 x 2 refunded
-  assert.strictEqual(KO.reciboTotal(ds, "R", "2026-11", SIZES), 32);
-  assert.strictEqual(KO.outstandingByCustomer(ds, SIZES)[0].depositHeld, 0);
+  assert.strictEqual(KO.reciboTotal(ds.slice(0, 2), "R", "2026-11", SIZES), 28);   // 40 - 6 x 2
+  assert.strictEqual(KO.reciboTotal(ds, "R", "2026-11", SIZES), 20);               // - 4 x 2
   const rec = KO.generateRecibo(ds, "R", "2026-11", SIZES, "H");
+  assert.ok(rec.includes("Return November 5: 6x 1L = -12.00"), rec);
   assert.ok(rec.includes("Return November 12: 4x 1L = -8.00"), rec);
-  assert.ok(!rec.includes("Return November 5"), rec);
-  assert.ok(rec.includes("Total: 32.00 Euro"), rec);
+  assert.ok(rec.includes("Total: 20.00 Euro"), rec);
+  // 8 collected, 20 paid back: the old bottles' refunds come out of our pocket
+  assert.strictEqual(KO.outstandingByCustomer(ds, SIZES)[0].depositHeld, -12);
 });
 
-test("new 1 L bottles are refunded before old ones", () => {
-  const ds = [
-    { customerId: "R", date: "2026-10-01", items: [{ sizeId: "1L", flavourId: "g", quantity: 3 }], empties: [] },
-    { customerId: "R", date: "2026-11-05", prices: { "1L": { price: 10, deposit: 2 } },
-      items: [{ sizeId: "1L", flavourId: "g", quantity: 4 }], empties: [] },
-    { customerId: "R", date: "2026-11-12", prices: { "1L": { price: 10, deposit: 2 } },
-      items: [], empties: [{ sizeId: "1L", quantity: 5 }] },
-  ];
-  assert.strictEqual(KO.reciboTotal(ds, "R", "2026-11", SIZES), 32);   // 40 - 4 x 2
-  assert.strictEqual(KO.outstandingByCustomer(ds, SIZES)[0].depositHeld, 0);
+test("an empties-only delivery refunds at the deposit it was saved with", () => {
+  const ds = [{ customerId: "R", date: "2026-11-05", prices: { "1L": { price: 11, deposit: 2 }, "270ml": { price: 5.5, deposit: 1 } },
+                items: [], empties: [{ sizeId: "1L", quantity: 3 }, { sizeId: "270ml", quantity: 2 }] }];
+  assert.strictEqual(KO.reciboTotal(ds, "R", "2026-11", SIZES), -8);
 });
 
 test("legacy deliveries keep their old refunds even with more empties than delivered", () => {

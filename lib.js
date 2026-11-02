@@ -88,58 +88,33 @@
     }, 0);
   }
 
-  // Deposit refunds for one customer's empties, walking their deliveries in date order.
-  // Each bottle out carries the deposit it was delivered with. Empties on a delivery are
-  // earlier bottles coming back, so they are matched before that delivery's own items, and
-  // the highest deposit comes back first (new 1 L bottles at 2 before old ones at 0).
-  // Deliveries without `prices` (saved before per-type prices) refund exactly as before:
-  // empties x size deposit. Empties with no bottle left to match refund the size deposit.
-  // Returns { refunds: Map(delivery -> { sizeId: { qty, amount } }), held }.
+  // Deposit refunds for one customer's empties. An empty refunds the deposit its delivery
+  // was saved with (delivery.prices), whatever bottle it is: since 2026-11 every 1 L empty
+  // gives 2 euro back, old bottles delivered without a deposit included. Deliveries saved
+  // before that have no `prices` and refund exactly as before (size deposit).
+  // Returns { refunds: Map(delivery -> { sizeId: { qty, amount } }), held } where held is
+  // deposits charged minus refunded (negative when old bottles were refunded).
   function depositLedger(deliveries, customerId, sizes) {
-    const mine = (deliveries || []).filter(function (d) { return d && d.customerId === customerId; })
-      .slice().sort(function (a, b) {
-        const ka = (a.date || "") + " " + (a.time || ""), kb = (b.date || "") + " " + (b.time || "");
-        return ka < kb ? -1 : ka > kb ? 1 : 0;
-      });
-    const pool = {};   // sizeId -> { deposit: count }
     const refunds = new Map();
     let charged = 0, refunded = 0;
-    mine.forEach(function (d) {
+    (deliveries || []).forEach(function (d) {
+      if (!d || d.customerId !== customerId) return;
       const per = {};
       (d.empties || []).forEach(function (e) {
-        const s = sizeById(sizes, e.sizeId);
-        const legacyDep = s ? s.deposit || 0 : 0;
-        const bag = pool[e.sizeId] || (pool[e.sizeId] = {});
-        const deps = Object.keys(bag).map(Number).sort(function (x, y) { return y - x; });
-        let left = e.quantity, amount = 0, qty = 0;
-        deps.forEach(function (dep) {
-          const take = Math.min(left, bag[dep]);
-          if (take <= 0) return;
-          bag[dep] -= take; left -= take;
-          if (dep > 0) { amount += take * dep; qty += take; }
-        });
-        if (!d.prices) { amount = e.quantity * legacyDep; qty = legacyDep > 0 ? e.quantity : 0; }
-        else if (left > 0 && legacyDep > 0) { amount += left * legacyDep; qty += left; }
-        if (qty > 0 || amount !== 0) {
-          const r = per[e.sizeId] || (per[e.sizeId] = { qty: 0, amount: 0 });
-          r.qty += qty; r.amount += amount;
-        }
-        refunded += amount;
+        const dep = unitDeposit(d, e.sizeId, sizes);
+        if (dep <= 0 || e.quantity <= 0) return;
+        const r = per[e.sizeId] || (per[e.sizeId] = { qty: 0, amount: 0 });
+        r.qty += e.quantity; r.amount += e.quantity * dep;
+        refunded += e.quantity * dep;
       });
-      (d.items || []).forEach(function (it) {
-        const dep = unitDeposit(d, it.sizeId, sizes);
-        const bag = pool[it.sizeId] || (pool[it.sizeId] = {});
-        bag[dep] = (bag[dep] || 0) + it.quantity;
-        charged += dep * it.quantity;
-      });
+      (d.items || []).forEach(function (it) { charged += unitDeposit(d, it.sizeId, sizes) * it.quantity; });
       refunds.set(d, per);
     });
     return { refunds: refunds, held: Math.round((charged - refunded) * 100) / 100 };
   }
 
   // Deposit refunded on `delivery`'s empties ({ total, perSize: { sizeId: { qty, amount } } }).
-  // `deliveries` is the full list (it must include `delivery`): what an empty refunds depends
-  // on the customer's earlier bottles (see depositLedger).
+  // `deliveries` is the full list (it must include `delivery`); see depositLedger.
   function deliveryRefund(deliveries, delivery, sizes) {
     const per = depositLedger(deliveries, delivery.customerId, sizes).refunds.get(delivery) || {};
     const perSize = {};

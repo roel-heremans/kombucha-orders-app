@@ -658,17 +658,63 @@
 
     const PRICE_TYPE_LABEL = { restaurant: "restaurant prices", private: "private prices", subscriber: "subscription prices" };
 
-    // Prices a delivery is charged at: an edited delivery keeps the prices it was saved with
-    // (none = old prices from Settings); a new one gets its customer's current prices.
-    function pricesFor(d) {
-      if (editing) return (A.state.deliveries.find((x) => x.id === editing) || {}).prices;
-      const cust = A.state.customers.find((c) => c.id === d.customerId);
-      return cust ? KO.pricesForCustomer(A.state.settings, cust) : undefined;
+    // Suggested prices ({ sizeId: { price (incl. deposit), deposit } }) the price boxes start
+    // from: an edited delivery keeps the prices it was saved with (none = old prices from
+    // Settings, `suggestedLegacy`); a new one gets its customer's current prices. The admin can
+    // overwrite the bottle price (excl. deposit) per size; the deposit stays fixed.
+    let suggested = null, suggestedLegacy = false;
+
+    function fillPrices(customerId) {
+      const sizes = A.state.settings ? A.state.settings.sizes : [];
+      suggested = null; suggestedLegacy = false;
+      if (editing) {
+        const saved = (A.state.deliveries.find((x) => x.id === editing) || {}).prices;
+        if (saved) suggested = saved;
+        else {
+          suggestedLegacy = true;
+          suggested = {};
+          sizes.forEach((s) => { suggested[s.id] = { price: s.price, deposit: s.deposit || 0 }; });
+        }
+      } else {
+        const cust = A.state.customers.find((c) => c.id === customerId);
+        if (cust) suggested = KO.pricesForCustomer(A.state.settings, cust);
+      }
+      const box = container.querySelector("#priceRows");
+      if (!box) return;
+      box.innerHTML = !suggested ? "" :
+        `<h4>Price per bottle</h4><div class="row">` +
+        sizes.filter((s) => suggested[s.id]).map((s) => {
+          const p = suggested[s.id];
+          return `<div><label>${A.esc(s.label)} € <span class="muted">+ €${KO.formatMoney(p.deposit || 0)} deposit</span></label>` +
+            `<input class="pr-base" data-size="${s.id}" type="number" min="0" step="0.05" inputmode="decimal" value="${KO.formatMoney(p.price - (p.deposit || 0))}"/></div>`;
+        }).join("") + `</div>`;
+      box.querySelectorAll(".pr-base").forEach((i) => i.addEventListener("input", updateSubtotal));
+    }
+
+    // Prices as currently in the boxes. `changed` = differs from the suggestion; `bad` = a box
+    // holds no valid price (the suggestion is used for it). Undefined prices = an old delivery
+    // left at its old Settings prices, saved without `prices` as before.
+    function currentPrices() {
+      if (!suggested) return { prices: undefined, changed: false, bad: false };
+      const out = {};
+      let changed = false, bad = false;
+      Object.keys(suggested).forEach((id) => { out[id] = Object.assign({}, suggested[id]); });
+      container.querySelectorAll(".pr-base").forEach((i) => {
+        const p = suggested[i.dataset.size];
+        if (!p) return;
+        const base = parseFloat(String(i.value).replace(",", "."));
+        if (!(base >= 0)) { bad = true; return; }
+        const price = Math.round((base + (p.deposit || 0)) * 100) / 100;
+        if (Math.abs(price - p.price) > 0.001) changed = true;
+        out[i.dataset.size] = { price, deposit: p.deposit || 0 };
+      });
+      return { prices: suggestedLegacy && !changed ? undefined : out, changed, bad };
     }
 
     function updateSubtotal() {
       const delivery = readForm();
-      const prices = pricesFor(delivery);
+      const cp = currentPrices();
+      const prices = cp.prices;
       if (prices) delivery.prices = prices;
       const sizes = A.state.settings ? A.state.settings.sizes : [];
       const total = KO.deliveryRevenue(delivery, sizes);
@@ -687,6 +733,7 @@
       if (pt) {
         const cust = A.state.customers.find((c) => c.id === delivery.customerId);
         pt.textContent = editing && !prices ? "(old prices)"
+          : cp.changed ? "(adjusted prices, incl. deposit)"
           : cust ? "(" + PRICE_TYPE_LABEL[KO.customerPriceType(cust)] + ", incl. deposit)" : "";
       }
     }
@@ -736,6 +783,7 @@
         `<div><label>Time</label><input id="dtime" type="time" value="${nowTime()}"/></div></div>` +
         `<h4>Bottles delivered</h4><div id="items"></div>` +
         `<button class="link" id="addItem">➕ Add line</button>` +
+        `<div id="priceRows"></div>` +
         `<h4>Empties received back</h4>${emptiesRows()}` +
         `<label>Note (optional)</label><textarea id="note" rows="2"></textarea>` +
         `<label style="display:flex;align-items:center;gap:8px;font-weight:normal"><input type="checkbox" id="dpaid" style="width:auto"/> Paid (payment already received)</label>` +
@@ -759,6 +807,7 @@
           if (items.length) items.forEach((it) => itemsDiv.appendChild(itemRow(it)));
           else itemsDiv.appendChild(itemRow());
         }
+        fillPrices(e.target.value);
         updateSubtotal();
       });
       container.querySelector("#addItem").addEventListener("click", (e) => { e.preventDefault(); itemsDiv.appendChild(itemRow()); });
@@ -766,6 +815,7 @@
       container.querySelector("#save").addEventListener("click", onSave);
       if (editing || fulfilling) container.querySelector("#cancelEdit").addEventListener("click", (e) => { e.preventDefault(); editing = null; fulfilling = null; built = false; renderNew(); });
       built = true;
+      fillPrices("");
       updateSubtotal();
     }
 
@@ -782,12 +832,13 @@
       if (!d.customerId || d.customerId === "__new__") { err.textContent = "Please choose a customer."; return; }
       if (!d.date) { err.textContent = "Please choose a date."; return; }
       if (d.items.length === 0) { err.textContent = "Add at least one bottle line."; return; }
+      const cp = currentPrices();
+      if (cp.bad) { err.textContent = "Please enter a valid bottle price."; return; }
+      if (cp.prices) d.prices = cp.prices;
       try {
         if (editing) { await A.updateDelivery(editing, d); editing = null; }
         else {
           d.enteredBy = A.user ? A.user.email : "";
-          const prices = pricesFor(d);
-          if (prices) d.prices = prices;
           const ref = await A.addDelivery(d);
           const orderId = fulfilling;
           fulfilling = null;
@@ -825,6 +876,7 @@
       });
       container.querySelector("#note").value = d.note || "";
       container.querySelector("#dpaid").checked = !!d.paid;
+      fillPrices(d.customerId);
       updateSubtotal();
       document.querySelector('nav button[data-view="new"]').click();
     };
@@ -843,6 +895,7 @@
       (o.items || []).forEach((it) => itemsDiv.appendChild(itemRow(it)));
       if ((o.items || []).length === 0) itemsDiv.appendChild(itemRow());
       container.querySelector("#note").value = o.note || "";
+      fillPrices(o.customerId);
       updateSubtotal();
       document.querySelector('nav button[data-view="new"]').click();
     };
